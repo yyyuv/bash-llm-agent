@@ -5,9 +5,12 @@
 // If/Else branch right after the tool_call, not as more prompt content.
 //
 // Code mapping:
-//   sys.safety_check   <-> safety.check_command()        (doitlib/safety.py)
-//   sys.confirm         <-> controller._confirm_destructive()
-//   The whole If/Else   <-> controller._handle_run_command()
+//   sys.safety_check    <-> safety.check_command()        (doitlib/safety.py)
+//   sys.confirmed        <-> controller._confirm_destructive() result
+//   The whole If/ElseIf  <-> controller._handle_run_command()
+// safety_check and confirmed are controller state, not context lines, so
+// they appear only inside conditions; only the outcomes that re-enter the
+// LLM context are emitted, as T: results.
 // Layer 1 (the model's own is_destructive flag) is still part of
 // sys.tool_call's args, as in v1 — sys.safety_check treats it only as a
 // lower bound and can never be talked down by the model.
@@ -26,22 +29,26 @@ DoitAgentV2: {
     U: env.user_request
     A: sys.tool_call              // run_command(...) | answer(text)
 
-    If (sys.tool_call == run_command) {
-        sys.safety_check(sys.tool_call.command)          // layer 2: deterministic regex guard, overrides a false "safe"
-
-        If (sys.safety_check.is_sudo) {
-            T: sys.blocked("sudo")                        // hard refusal, no confirmation possible
-        } Else If (sys.safety_check.is_interactive) {
-            T: sys.blocked("interactive")                 // vim/nano/top/less/bare ssh/bare python — would hang subprocess capture
-        } Else If (sys.safety_check.is_destructive) {
-            sys.confirm(sys.tool_call.command, sys.tool_call.explanation)   // prints command + explanation, reads "y"/anything else
-            If (sys.confirmed) {
-                T: sys.tool_response                       // executed; stdout/stderr/rc captured as in v1
-            } Else {
-                T: sys.blocked("declined_by_user")          // recorded so a later turn's "actually yes" can reference it
+    // layer 2: deterministic regex guard (sys.safety_check = safety.check_command)
+    // classifies the command; it overrides a false "safe" and can never be talked down.
+    If sys.tool_call == run_command {
+        If sys.safety_check.is_sudo {
+            T: sys.blocked                     // hard refusal ("sudo"), no confirmation possible
+        }
+        ElseIf sys.safety_check.is_interactive {
+            T: sys.blocked                     // vim/nano/top/less/bare ssh/python — would hang subprocess capture
+        }
+        ElseIf sys.safety_check.is_destructive {
+            // controller prints command + explanation and reads y/N -> sys.confirmed
+            If sys.confirmed {
+                T: sys.tool_response           // executed; stdout/stderr/rc captured as in v1
             }
-        } Else {
-            T: sys.tool_response                            // read-only, runs immediately as in v1
+            Else {
+                T: sys.blocked                 // declined_by_user; recorded so a later turn's "actually yes" can reference it
+            }
+        }
+        Else {
+            T: sys.tool_response               // read-only, runs immediately as in v1
         }
     }
 }

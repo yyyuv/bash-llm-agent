@@ -154,11 +154,16 @@ def _execute_command(args: dict, config: Config, steps: list, check: safety.Safe
 def _append_tool_result(messages: list, decision: llm.Decision, observation: str) -> None:
     """Feed a tool's result back into the conversation for the next step.
 
-    Only matters when max_steps > 1; with a single step the loop ends
-    before the model would see this.
+    Adapter-agnostic: a native decision (tool_call_id set) feeds the
+    result back via the provider's tool role; a prompted decision
+    (tool_call_id None) has no such role, so the result goes back as a
+    plain user message. Only matters when max_steps > 1; with a single
+    step the loop ends before the model would see this.
     """
-    if decision.assistant_message:
-        messages.append(decision.assistant_message)
+    if not decision.assistant_message:
+        return
+    messages.append(decision.assistant_message)
+    if decision.tool_call_id is not None:
         messages.append(
             {
                 "role": "tool",
@@ -166,3 +171,5 @@ def _append_tool_result(messages: list, decision: llm.Decision, observation: str
                 "content": observation,
             }
         )
+    else:
+        messages.append({"role": "user", "content": f"Tool result:\n{observation}"})

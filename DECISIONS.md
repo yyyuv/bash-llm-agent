@@ -111,5 +111,33 @@ Lesson for the report's limitations chapter: this is a second, independent illus
 ### P2f — observation: conda init block is fully commented out in ~/.zshrc
 While debugging P2e, noticed lines 3–16 of `~/.zshrc` (the `# >>> conda initialize >>>` block `conda init` normally manages) are entirely commented out. This explains an earlier session detail: a `(base)`-prompted terminal still resolved `python3` to `/usr/bin/python3` rather than Miniconda's, because conda's own PATH-prepending hook never actually runs on shell startup — the `(base)` prompt was presumably set some other way (or is stale from an old activation). Not a doit bug, not touched — just recorded so a future session doesn't waste time re-diagnosing the same "why does `(base)` not mean what I'd expect" question. Consistent with the multi-interpreter risk already logged in P1g #2.
 
+## Phase 3 — 2026-07-07
+
+### P3a — adapter selected by an explicit `adapter` config key, not auto-detected from the model string
+Chosen: `doit.cfg` carries both `model` and `adapter` (`native` | `prompted`); `config.adapter` (default `native`) picks the code path in `llm.call()`. Switching model = the same one-line edit as before, now optionally two lines.
+Rejected: auto-detecting the adapter from the model name (e.g. "contains llama3 → prompted"). That buries a model→capability table inside `llm.py`, silently breaks for any new model, and hides the very knob the assignment asks us to demonstrate. Explicit is more honest and matches PLAN_DETAILED's own config sketch (`name = ...` / `adapter = ...`).
+Rationale: the two-adapter split IS the "model flexibility" deliverable; making it a visible config choice makes the report's point for us.
+
+### P3b — one `call()` interface, two private adapters, identical `Decision` out
+Chosen: `llm.call()` dispatches to `_call_native` (LiteLLM `tools=` + `tool_choice="required"`) or `_call_prompted` (JSON-in-prompt). Both return the same `Decision`; the controller, safety layer, history, and executor are byte-identical across models — the architectural point of the whole phase.
+Design detail: the prompted adapter sets `Decision.tool_call_id = None` and stuffs its raw text reply into `assistant_message`. `controller._append_tool_result` branches on `tool_call_id is None` to feed results back as a plain `U:` user message instead of the native `T:` tool role — exactly the v2↔v3 ACDL diff. Unused at `max_steps=1` but correct for Phase 4.
+
+### P3c — prompted adapter: extract → validate → retry-once → raise
+Chosen: `_extract_json_object` tries the whole de-fenced reply, then the first *balanced* `{...}` run (a string-aware brace scanner, so braces inside string values don't fool it); `_parse_prompted_reply` then validates the tool name against the real `TOOL_SCHEMAS` names and requires `args` to be an object. Any failure raises `ValueError`; `_call_prompted` retries **once**, appending the bad reply + the parse error (prompts/prompted_retry.txt) so the model can self-correct, then raises `RuntimeError` on a second failure (the entry point shows a clean message; the full exchange is already logged). Implements D6 (JSON format) verbatim.
+Rejected: silently coercing a hallucinated tool name or missing args into a best guess — that would hide exactly the failure modes the model-comparison chapter is supposed to surface.
+Note: tool schemas are rendered into the system prompt by `_render_tools_as_text` from the same `TOOL_SCHEMAS` the native adapter passes out-of-band — one source of truth, no drift between adapters.
+
+### P3d — offline unit tests stand in for a live Ollama on this machine
+Context: Ollama is **not installed** on the dev machine (`which ollama` → not found), so the live three-model suite can't run here yet; that's a user setup step (install Ollama, `ollama pull mistral:7b llama3:8b`).
+Chosen: `tests/prompted_adapter_tests.py` proves the adapter's parsing/validation/retry logic against the exact malformed replies weak models emit (fenced JSON, JSON-in-prose, braces-in-strings, hallucinated names, non-object args, garbage-then-valid, two-failures), stubbing `litellm.completion` for the retry path. 10/10 pass under `/usr/bin/python3` (the interpreter that has litellm). Results in logs/phase3/prompted_adapter_results.json.
+Rationale: this is the defense-in-depth argument again (P2's guard-bypass tests, restated for the adapter) — you must simulate layer 1 (the model) failing to prove layer 2 (the parser) recovers, and that doesn't need a real model. The *live* cross-model divergence transcripts still need the user's Ollama and are the remaining Phase 3 gate item.
+
+### P3e — local models: qwen3:4b-instruct (native) + gemma3:4b (prompted), replacing the planned mistral:7b / llama3:8b
+Changed from the plan's 7–8B pair to the ~4B tier actually installed. Roles preserved exactly: `ollama/qwen3:4b-instruct` is the local **tool-calling** model (native adapter), `ollama/gemma3:4b` is the local **non-tool-calling** model (prompted adapter). The `-instruct` qwen3 tag is the non-thinking variant (avoids reasoning-token noise). No code change needed — `model`/`adapter` are pure config (the whole point of P3a/P3b); only the model strings differ.
+Rationale for the swap: smaller/faster to pull and run on this machine while still covering the assignment's required trichotomy (API / local-with-tools / local-without-tools).
+
+### P3f — sanity-checked the local model before running the suite
+Before the manual cross-model runs, ran two quick live probes against Ollama (server up on :11434) to retire the top Phase-3 risk (LiteLLM+Ollama tool-calling quirks) up front rather than discovering it mid-suite: (1) native tool-calling on `ollama/qwen3:4b-instruct` returned a clean `run_command` tool call with correct args — so `adapter = native` works with no `ollama_chat/` workaround; (2) the prompted adapter parsed a live Ollama reply end-to-end (qwen3 stand-in until gemma3 finished downloading), returning a Decision with `tool_call_id=None` (the prompted-path marker). Both good — so any oddities in the actual suite are model behavior worth reporting, not plumbing bugs.
+
 ### Process: this file's ownership
 Originally planned as user-written-only (defense insurance). Changed by Yuval's request: Claude creates and maintains it, adding entries whenever a decision is made or revised during work; Yuval reviews and edits. The insurance now comes from review, not authorship — read every entry critically.

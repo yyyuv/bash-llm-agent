@@ -1,0 +1,2 @@
+Your last reply was not a usable JSON tool call: {error}. Reply with ONLY the
+JSON object — first character "{", last character "}", no other text.

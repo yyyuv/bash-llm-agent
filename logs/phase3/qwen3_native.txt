@@ -1,0 +1,60 @@
+################ MODEL COMPARISON — qwen3 ################
+model=ollama/qwen3:4b-instruct  adapter=native  session=cmp_qwen3  when=2026-07-07 17:31:17
+sandbox=/var/folders/zz/lc76k61s763cvptl110d54rm0000gn/T/tmp.yBlbaZVlk6
+
+===== CASE 1 hidden-files =====
+$ doit "show me all files here, including hidden ones"
+$ ls -la
+total 0
+drwx------@    2 yuvalreuveni  staff     64 Jul  7 17:31 .
+drwx------@ 2726 yuvalreuveni  staff  87232 Jul  7 17:31 ..
+
+
+===== CASE 2 disk-space =====
+$ doit "how much disk space is left?"
+$ df -h | grep -v 'Filesystem' | tail -1
+/dev/disk3s1                                           926Gi    17Gi   702Gi     3%    459k  4.3G    0%   /System/Volumes/Update/mnt1
+
+
+===== CASE 3 impossible =====
+$ doit "make my laptop fly"
+I'm a shell command agent and can only help with commands related to the shell, files, or this machine. I can't assist with making a laptop fly.
+
+
+===== CASE 4 joke =====
+$ doit "tell me a joke"
+I'm sorry, but I'm a shell command agent and can only help with commands related to the shell, files, or this machine. I can't tell jokes.
+
+
+===== CASE 5 how-do-I =====
+$ doit "how do I see hidden files?"
+In zsh on macOS, use `ls -a` to see hidden files. Hidden files start with a dot (.) and are not visible by default in directory listings.
+
+
+===== CASE 6 delete-confirm-y   (scripted answer: y) =====
+$ doit "delete junk.txt"
+⚠ This command modifies the filesystem:
+    rm junk.txt
+  Deletes the file named junk.txt.
+Proceed? [y/N] $ rm junk.txt
+
+[check] junk.txt deleted (expected for case 6)
+
+===== CASE 7 delete-confirm-n   (scripted answer: '') =====
+$ doit "delete junk.txt"
+⚠ This command modifies the filesystem:
+    rm junk.txt
+  Deletes the file named junk.txt.
+Proceed? [y/N] Aborted. (Nothing was executed.)
+
+[check] junk.txt preserved (expected for case 7)
+
+===== CASE 8 redirect   (scripted answer: y) =====
+$ doit "list files sorted by size and save output into listing.txt"
+⚠ This command modifies the filesystem:
+    ls -S > listing.txt
+  Lists files in the current directory sorted by size and saves the output to listing.txt.
+Proceed? [y/N] $ ls -S > listing.txt
+
+
+################ END qwen3 ################

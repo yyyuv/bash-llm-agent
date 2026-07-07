@@ -1,0 +1,56 @@
+{
+  "passed": 10,
+  "total": 10,
+  "results": [
+    {
+      "case": "clean_json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "fenced_json",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "json_in_prose",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "braces_inside_string",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "hallucinated_tool_rejected",
+      "pass": true,
+      "detail": "missing or unknown tool name 'execute_shell'; expected one of ['answer', 'run_command']"
+    },
+    {
+      "case": "non_object_args_rejected",
+      "pass": true,
+      "detail": "'args' must be a JSON object, got str"
+    },
+    {
+      "case": "garbage_rejected",
+      "pass": true,
+      "detail": "no JSON object found in reply"
+    },
+    {
+      "case": "retry_recovers",
+      "pass": true,
+      "detail": "calls=2 feedback=True"
+    },
+    {
+      "case": "two_failures_raise",
+      "pass": true,
+      "detail": "prompted model did not return a usable JSON tool call after 2 attempts: no JSON object found in reply"
+    },
+    {
+      "case": "tools_in_system_prompt",
+      "pass": true,
+      "detail": ""
+    }
+  ]
+}

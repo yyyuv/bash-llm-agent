@@ -5,6 +5,12 @@ at all. Switching the model is a one-line edit:
 
     [doit]
     model = ollama/mistral:7b
+    adapter = native
+
+`adapter` selects how the LPU is driven: "native" uses LiteLLM's
+tool-calling API (gpt-4o-mini, mistral:7b); "prompted" hand-rolls the
+tool protocol in the system prompt for models without tool-calling
+(llama3:8b). See doitlib/llm.py.
 """
 
 import configparser
@@ -20,6 +26,7 @@ class Config:
     """Tunable settings for a doit run."""
 
     model: str = "openai/gpt-4o-mini"  # any LiteLLM model string
+    adapter: str = "native"  # "native" (tool-calling) | "prompted" (JSON-in-prompt)
     temperature: float = 0.0
     max_steps: int = 1  # 1 = single-command mode (Phase 1)
     command_timeout_seconds: int = 30
@@ -33,6 +40,7 @@ def load_config() -> Config:
     if parser.read(CONFIG_PATH) and parser.has_section("doit"):
         section = parser["doit"]
         config.model = section.get("model", config.model)
+        config.adapter = section.get("adapter", config.adapter)
         config.temperature = section.getfloat("temperature", config.temperature)
         config.max_steps = section.getint("max_steps", config.max_steps)
         config.command_timeout_seconds = section.getint(

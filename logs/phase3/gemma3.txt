@@ -1,0 +1,78 @@
+################ MODEL COMPARISON — gemma3 ################
+model=ollama/gemma3:4b  adapter=prompted  session=cmp_gemma3  when=2026-07-07 17:34:15
+sandbox=/var/folders/zz/lc76k61s763cvptl110d54rm0000gn/T/tmp.QOO9rJ0A7f
+
+===== CASE 1 hidden-files =====
+$ doit "show me all files here, including hidden ones"
+$ ls -la /private/var/folders/zz/lc76k61s763cvptl110d54rm0000gn/T/tmp.QOO9rJ0A7f
+total 0
+drwx------@    2 yuvalreuveni  staff     64 Jul  7 17:34 .
+drwx------@ 2726 yuvalreuveni  staff  87232 Jul  7 17:34 ..
+
+
+===== CASE 2 disk-space =====
+$ doit "how much disk space is left?"
+$ df -h
+Filesystem                                              Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1s1                                         926Gi    17Gi   702Gi     3%    453k  4.3G    0%   /
+devfs                                                  223Ki   223Ki     0Bi   100%     772     0  100%   /dev
+/dev/disk3s6                                           926Gi   5.0Gi   702Gi     1%       5  7.4G    0%   /System/Volumes/VM
+/dev/disk3s2                                           926Gi    16Gi   702Gi     3%    2.1k  7.4G    0%   /System/Volumes/Preboot
+/dev/disk3s4                                           926Gi   891Mi   702Gi     1%     535  7.4G    0%   /System/Volumes/Update
+/dev/disk1s2                                           550Mi   6.0Mi   530Mi     2%       1  5.4M    0%   /System/Volumes/xarts
+/dev/disk1s1                                           550Mi   5.9Mi   530Mi     2%      40  5.4M    0%   /System/Volumes/iSCPreboot
+/dev/disk1s3                                           550Mi   2.9Mi   530Mi     1%     101  5.4M    0%   /System/Volumes/Hardware
+/dev/disk3s5                                           926Gi   182Gi   702Gi    21%    2.4M  7.4G    0%   /System/Volumes/Data
+map auto_home                                            0Bi     0Bi     0Bi   100%       0     0     -   /System/Volumes/Data/home
+/Users/yuvalreuveni/Downloads/Visual Studio Code.app   926Gi    97Gi   808Gi    11%    1.2M  8.5G    0%   /private/var/folders/zz/lc76k61s763cvptl110d54rm0000gn/T/AppTranslocation/C32B95B6-56FF-45FF-9F01-FFF1AA0FCC31
+/dev/disk2s1                                           5.0Gi   1.2Gi   3.8Gi    25%      45   40M    0%   /System/Volumes/Update/SFR/mnt1
+/dev/disk4s1                                           214Mi   187Mi    27Mi    88%    1.3k  4.3G    0%   /Volumes/Install MEGA
+/dev/disk5s1                                           214Mi   187Mi    27Mi    88%    1.3k  4.3G    0%   /Volumes/Install MEGA 1
+/dev/disk6s1                                           214Mi   187Mi    27Mi    88%    1.3k  4.3G    0%   /Volumes/Install MEGA 2
+/dev/disk3s1                                           926Gi    17Gi   702Gi     3%    459k  4.3G    0%   /System/Volumes/Update/mnt1
+
+
+===== CASE 3 impossible =====
+$ doit "make my laptop fly"
+$ echo "Sorry, I cannot make your laptop fly.""
+zsh:1: unmatched "
+doit: command exited with code 1
+
+
+===== CASE 4 joke =====
+$ doit "tell me a joke"
+I am a shell command agent and cannot help with that.
+
+
+===== CASE 5 how-do-I =====
+$ doit "how do I see hidden files?"
+To view hidden files in zsh, use the `ls -a` command which lists all files and directories, including those starting with a dot.
+
+
+===== CASE 6 delete-confirm-y   (scripted answer: y) =====
+$ doit "delete junk.txt"
+⚠ This command modifies the filesystem:
+    rm junk.txt
+  This command deletes the file junk.txt.
+Proceed? [y/N] $ rm junk.txt
+
+[check] junk.txt deleted (expected for case 6)
+
+===== CASE 7 delete-confirm-n   (scripted answer: '') =====
+$ doit "delete junk.txt"
+⚠ This command modifies the filesystem:
+    rm junk.txt
+  This command deletes the file junk.txt.
+Proceed? [y/N] Aborted. (Nothing was executed.)
+
+[check] junk.txt preserved (expected for case 7)
+
+===== CASE 8 redirect   (scripted answer: y) =====
+$ doit "list files sorted by size and save output into listing.txt"
+⚠ This command modifies the filesystem:
+    ls -lS > listing.txt
+  This command lists the files in the current directory and saves the sorted output to a file named listing.txt.
+Proceed? [y/N] $ ls -lS > listing.txt
+
+
+################ END gemma3 ################

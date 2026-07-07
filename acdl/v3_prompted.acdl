@@ -1,0 +1,66 @@
+// doit v3 — the PROMPTED adapter (Phase 3, model flexibility)
+// Same agent, same tools, same safety gate as v2 — only the *plumbing* to
+// the LPU differs, for local models without tool-calling (ollama/llama3:8b).
+// This spec is the deliberate visual diff against v2_safety.acdl; put the
+// two side by side in the model-comparison chapter.
+//
+// What changes vs. the native adapter (v1/v2):
+//   - AVAILABLE_TOOLS moves from an out-of-band schema (LiteLLM tools=)
+//     into the system PROSE as text  -> shown here as AVAILABLE_TOOLS(text)
+//     plus the JSON_PROTOCOL envelope (reply with ONLY the tool+args object)
+//   - The model's decision arrives as a plain assistant string that WE
+//     parse -> resp.raw_reply, then parseJson(...) into sys.tool_call.
+//   - On a parse failure we retry once IN-BAND, feeding the error back as
+//     a U: message -> the If/Else on parseJson below.
+//   - A tool result would feed back as U: (a plain user message), not the
+//     T: tool role the native adapter uses (relevant from Phase 4 on).
+//
+// Code mapping:
+//   JSON_PROTOCOL            <-> prompts/prompted_suffix.txt
+//   AVAILABLE_TOOLS(text)    <-> llm._render_tools_as_text(TOOL_SCHEMAS)
+//   inject into S:           <-> llm._inject_tool_instructions()
+//   sys.tool_call / parse    <-> llm._extract_json_object() + _parse_prompted_reply()
+//   the retry If/Else        <-> the loop in llm._call_prompted() (max 2 attempts)
+//   RETRY_CORRECTION         <-> prompts/prompted_retry.txt
+//   sys.safety_check ...     <-> unchanged from v2 (doitlib/safety.py) — omitted below for focus
+//
+// sys.tool_call / sys.parse_failed are controller state (as sys.safety_check
+// is in v2), derived by parsing resp.raw_reply — so they appear only inside
+// conditions, never as an  x = f(y)  assignment (not valid ACDL).
+
+DoitAgentV3Prompted[@T]: {
+    S: {
+        AGENT_INSTRUCTIONS               // identical role + safety policy as v2
+        AVAILABLE_TOOLS(text)            // tool names/args/descriptions rendered INTO the prompt
+        JSON_PROTOCOL                    // reply with ONLY the tool and args as bare json, no prose
+    }
+    U: {
+        env.cwd
+        env.datetime
+        env.shell
+        env.os
+    }
+    U: env.user_request[@T]
+
+    // --- the decision arrives as raw text, not a structured tool call ---
+    // controller parses resp.raw_reply -> sys.tool_call (strip fences, take the
+    // first balanced json object, validate name+args); bad parse sets sys.parse_failed.
+    A: resp.raw_reply[@T.I]              // e.g. chatty text wrapping a fenced json tool object
+
+    If sys.parse_failed {
+        U: RETRY_CORRECTION(sys.parse_error)          // tells model its last reply was not valid JSON
+        A: resp.raw_reply_retry[@T.I]                 // one more attempt, re-parsed into sys.tool_call
+        If sys.parse_failed {
+            A: GRACEFUL_ERROR                          // give up cleanly; full exchange logged
+        }
+    }
+
+    // --- from here on: identical to the native adapter (v2) ---
+    // dispatch sys.tool_call through the same safety gate and executor;
+    // a run_command result would return as  U: truncate(sys.tool_response)
+    // (a plain user message) rather than the native  T:  tool role.
+    If sys.tool_call == run_command {
+        // ... v2 safety If/Else (sudo / interactive / destructive / run) ...
+        U: truncate(sys.tool_response[@T.I])           // NOTE: U:, not T: — the adapter difference
+    }
+}

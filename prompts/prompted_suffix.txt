@@ -1,0 +1,15 @@
+You do NOT have a tool-calling API. You must reply with ONLY a single JSON
+object and nothing else — no prose before or after it, no markdown code
+fences, no explanation. The very first character of your reply must be "{"
+and the very last must be "}".
+
+The JSON object has exactly this shape:
+
+  {"tool": "<tool name>", "args": { ... }}
+
+Choose "tool" from exactly these names, and put the arguments that tool
+requires inside "args":
+
+{tools}
+
+Reply with only the JSON object.
