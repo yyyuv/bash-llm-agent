@@ -4,9 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current state
 
-This is a **university assignment (Assignment 3, "Class 9 — LLM Systems")**, currently at the planning stage. The only files are [PLAN.md](PLAN.md) (compact reference) and [PLAN_DETAILED.md](PLAN_DETAILED.md) (plain-language elaboration with rationale). **No code exists yet.** Read both plans before implementing anything — they contain locked design decisions, an intended repo layout, and a phase-by-phase build order that grading depends on.
+This is a **university assignment (Assignment 3: Agents — an agentic shell tool called `doit`)**, currently at the planning stage. The only files are [PLAN.md](PLAN.md) (compact reference) and [PLAN_DETAILED.md](PLAN_DETAILED.md) (plain-language elaboration with rationale). **No code exists yet.**
 
-The deliverable is `doit`: an agentic shell tool. You type an English request in your terminal; it decides which shell command(s) to run and runs them. Grading rewards the harder "agentic" parts (memory, user shell-history awareness, multi-terminal sessions, an extension) **and** ACDL documentation written *as you go* — retrofitted docs are explicitly penalized.
+> **Maintenance rule:** update this "Current state" section at the end of every completed phase (what exists, what phase is next). A stale CLAUDE.md misleads future sessions.
+
+**How to use the plan files:** [PLAN.md](PLAN.md) §2 is the authoritative build order — read the current phase's section before starting it. [PLAN_DETAILED.md](PLAN_DETAILED.md) is the human-oriented rationale doc; consult it only when a design question arises. Decisions marked ⏸ there are **open** — never resolve them yourself, ask the user.
+
+The deliverable is `doit`: you type an English request in your terminal; it decides which shell command(s) to run and runs them. Grading rewards the harder "agentic" parts (memory, user shell-history awareness, multi-terminal sessions, an extension) **and** ACDL documentation written *as you go* — retrofitted docs are explicitly penalized.
 
 ## The one non-negotiable architectural principle
 
@@ -50,7 +54,7 @@ doitlib/
   tools.py               # tool impls; run_command captures stdout/stderr/rc, timeout, truncates to ~4KB for context (full output on disk)
   safety.py              # the regex guard
   state.py               # everything under ~/.doit/
-acdl/                    # v1..v9 specs + rendered screenshots (one per phase)
+acdl/                    # one spec per phase + rendered screenshots
 prompts/                 # prompt templates as files
 shell/bashrc_snippet.sh  shell/zshrc_snippet.sh
 tests/cases.md           # ~15 fixed cases run against all 3 models
@@ -65,7 +69,12 @@ report/
 
 ## Build order
 
-Follow the phased order in [PLAN.md](PLAN.md) §2 (Phase 0 skeleton → Phase 9 extension → Phase 10 report). **Decisions are locked only through Phase 3; Phases 4–9 need joint review before starting** (see the ⏸ scope note in PLAN.md). Each phase is a phase gate: it is not "done" without its `.acdl` spec and 2–3 logged test interactions committed. The chosen extension (Phase 9) is **command plans / multi-step execution** (`max_steps>1` with failure recovery + plan-preview confirmation for destructive sequences).
+Follow the phased order in [PLAN.md](PLAN.md) §2 (Phase 0 skeleton → Phase 9 extension → Phase 10 report). **Decisions are locked only through Phase 3; Phases 4–9 need joint review before starting** (see the ⏸ scope note in PLAN.md). Each phase is a phase gate: it is not "done" without its `.acdl` spec and 2–3 logged test interactions committed. **The Phase 9 extension choice (Decision 11) is deferred — do not assume one; it will be decided after Phase 3.**
+
+## Ownership
+
+- **[DECISIONS.md](DECISIONS.md)** is maintained by Claude: whenever a design/behavioral/architectural decision is made, revised, or contradicted by evidence during a session, **add or update an entry** (chosen / rejected / why / observed later). The user reviews and edits it freely — never revert their edits.
+- **Report prose is written by the user — never draft it.** Curated logs and ACDL drafts may be generated, but the user reviews and owns them.
 
 ## Conventions
 
