@@ -90,7 +90,7 @@ Follow the assignment's own progression; keep each phase's ACDL and 2–3 logged
 
 **Phase 3 — model flexibility (1–1.5 days).** Ollama: `ollama pull mistral:7b` (tool-calling) and `ollama pull llama3:8b` (not). Build the prompted adapter (JSON format — decided), run the *same* test suite on all three models, save divergent transcripts — this is the required model-comparison section. LiteLLM model strings: `ollama/mistral:7b`, `ollama/llama3:8b`, and `openai/gpt-4o-mini` for the API model (decided — paid key available; key via env var, not in repo).
 
-> **⏸ Planning scope note:** decisions are locked through Phase 3 (see PLAN_DETAILED.md checklist: cd wrapper, JSONL, dual-shell, OpenAI, in-band safety flag + guard with judge fallback, JSON prompted format, polite-refusal chit-chat policy). Phases 4–9 below are drafted but pending joint review — discuss before starting them.
+> **⏸ Planning scope note:** decisions are locked through **Phase 4** (Phase 3 checklist in PLAN_DETAILED.md: cd wrapper, JSONL, dual-shell, OpenAI, in-band safety flag + guard with judge fallback, JSON prompted format, polite-refusal chit-chat policy — plus Phase 4 reviewed & locked 2026-07-07: multi-turn history replayed as `U:/A:/T:` chat turns, last K≈10 turns, D7 tiered-truncation budgets, ACDL v4 `ForEach` history loop). Phases 5–9 below remain drafted but pending joint review — discuss before starting them.
 
 **Phase 4 — multi-turn (1 day).** Session history in context ("now sort them by date", "no, latest first"). Include per-turn: request, commands run, truncated outputs. ACDL v3 uses `ForEach(@t: range(1, @T-1))` — exactly the pattern from the syntax reference.
 

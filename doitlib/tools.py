@@ -13,9 +13,17 @@ for every provider.
 import subprocess
 from dataclasses import dataclass
 
-# Command output longer than this is truncated before entering the LLM
-# context; the full output is always kept on disk in the session record.
-MAX_OUTPUT_CHARS_IN_CONTEXT = 4000
+# D7 tiered truncation budgets (Phase 4). Output entering the LLM context
+# is trimmed to head+tail; the full text always stays on disk in the
+# session record. Two budgets, not one: the "hot" budget is for the
+# current turn's live output — it drives the next decision, so keep it
+# rich; the "cold" budget is for older turns replayed into history, where
+# only the gist matters and the K-turn multiplier makes bytes expensive.
+# (DECISIONS.md D7 — chosen over a metadata-only cliff for older turns.)
+HOT_HEAD_CHARS = 3000
+HOT_TAIL_CHARS = 1000
+COLD_HEAD_CHARS = 1000
+COLD_TAIL_CHARS = 300
 
 TOOL_SCHEMAS = [
     {
@@ -107,15 +115,22 @@ def run_command(command: str, shell_path: str, timeout_seconds: int) -> CommandR
         )
 
 
-def truncate_for_context(text: str) -> str:
+def truncate_for_context(
+    text: str,
+    head_chars: int = HOT_HEAD_CHARS,
+    tail_chars: int = HOT_TAIL_CHARS,
+) -> str:
     """Shorten long command output before it enters the LLM context.
 
-    Keeps the head and tail (both often matter — headers and totals) and
-    says how much was cut. The full text stays on disk in the session log.
+    Keeps the head and tail and says how much was cut — head for listings
+    (the useful part is at the top), tail for errors (they print at the
+    end). Defaults to the hot budget (current turn); pass the cold budget
+    (tools.COLD_*) when replaying older turns into history. The full text
+    stays on disk in the session log.
     """
-    if len(text) <= MAX_OUTPUT_CHARS_IN_CONTEXT:
+    if len(text) <= head_chars + tail_chars:
         return text
-    head = text[: MAX_OUTPUT_CHARS_IN_CONTEXT - 1000]
-    tail = text[-800:]
+    head = text[:head_chars]
+    tail = text[-tail_chars:]
     cut = len(text) - len(head) - len(tail)
     return f"{head}\n... [{cut} characters truncated] ...\n{tail}"

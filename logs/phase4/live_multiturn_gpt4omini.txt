@@ -1,0 +1,70 @@
+Phase 4 gate evidence — live multi-turn transcript
+Model: openai/gpt-4o-mini (native adapter)   Session: DOIT_SESSION=demo   Date: 2026-07-07
+
+Demonstrates: (1) follow-ups resolve against replayed history without a classifier;
+(2) each refinement produces a DIFFERENT command (no parroting); (3) ls's own sort
+flags are used, not `sort -k N`; (4) BSD creation-time is answered honestly, not faked.
+This is the passing counterpart to the failed gemma3:4b run in llm log (DECISIONS.md P4d).
+
+--------------------------------------------------------------------------------
+$ DOIT_SESSION=demo doit "list the files here"
+
+$ ls -l
+total 232
+drwxr-xr-x@  6 yuvalreuveni  staff    192 Jul  7 18:23 acdl
+-rw-r--r--@  1 yuvalreuveni  staff  12405 Jul  7 18:24 CLAUDE.md
+-rw-r--r--@  1 yuvalreuveni  staff  30675 Jul  7 18:57 DECISIONS.md
+-rwxr-xr-x@  1 yuvalreuveni  staff   1319 Jul  7 15:00 doit
+drwxr-xr-x@ 11 yuvalreuveni  staff    352 Jul  7 18:20 doitlib
+drwxr-xr-x@  7 yuvalreuveni  staff    224 Jul  7 18:21 logs
+-rw-r--r--@  1 yuvalreuveni  staff  44592 Jul  7 18:29 PLAN_DETAILED.md
+-rw-r--r--@  1 yuvalreuveni  staff  17995 Jul  7 18:15 PLAN.md
+drwxr-xr-x@  6 yuvalreuveni  staff    192 Jul  7 18:56 prompts
+drwxr-xr-x@  8 yuvalreuveni  staff    256 Jul  7 17:45 sessions
+drwxr-xr-x@  6 yuvalreuveni  staff    192 Jul  7 18:21 tests
+
+--------------------------------------------------------------------------------
+$ DOIT_SESSION=demo doit "now sort them by date"
+# follow-up resolves against the previous listing; command CHANGES to ls -lt
+# (modification time, newest first) — not a copy, and not the broken `sort -k 5`.
+
+$ ls -lt
+total 232
+-rw-r--r--@  1 yuvalreuveni  staff  30675 Jul  7 18:57 DECISIONS.md
+drwxr-xr-x@  6 yuvalreuveni  staff    192 Jul  7 18:56 prompts
+-rw-r--r--@  1 yuvalreuveni  staff  44592 Jul  7 18:29 PLAN_DETAILED.md
+-rw-r--r--@  1 yuvalreuveni  staff  12405 Jul  7 18:24 CLAUDE.md
+drwxr-xr-x@  6 yuvalreuveni  staff    192 Jul  7 18:23 acdl
+drwxr-xr-x@  7 yuvalreuveni  staff    224 Jul  7 18:21 logs
+drwxr-xr-x@  6 yuvalreuveni  staff    192 Jul  7 18:21 tests
+drwxr-xr-x@ 11 yuvalreuveni  staff    352 Jul  7 18:20 doitlib
+-rw-r--r--@  1 yuvalreuveni  staff  17995 Jul  7 18:15 PLAN.md
+drwxr-xr-x@  8 yuvalreuveni  staff    256 Jul  7 17:45 sessions
+-rwxr-xr-x@  1 yuvalreuveni  staff   1319 Jul  7 15:00 doit
+
+--------------------------------------------------------------------------------
+$ DOIT_SESSION=demo doit "now in ascending order"
+# refinement of the refinement: the flag FLIPS to ls -ltr (oldest first).
+
+$ ls -ltr
+total 232
+-rwxr-xr-x@  1 yuvalreuveni  staff   1319 Jul  7 15:00 doit
+drwxr-xr-x@  8 yuvalreuveni  staff    256 Jul  7 17:45 sessions
+-rw-r--r--@  1 yuvalreuveni  staff  17995 Jul  7 18:15 PLAN.md
+drwxr-xr-x@ 11 yuvalreuveni  staff    352 Jul  7 18:20 doitlib
+drwxr-xr-x@  6 yuvalreuveni  staff    192 Jul  7 18:21 tests
+drwxr-xr-x@  7 yuvalreuveni  staff    224 Jul  7 18:21 logs
+drwxr-xr-x@  6 yuvalreuveni  staff    192 Jul  7 18:23 acdl
+-rw-r--r--@  1 yuvalreuveni  staff  12405 Jul  7 18:24 CLAUDE.md
+-rw-r--r--@  1 yuvalreuveni  staff  44592 Jul  7 18:29 PLAN_DETAILED.md
+drwxr-xr-x@  6 yuvalreuveni  staff    192 Jul  7 18:56 prompts
+-rw-r--r--@  1 yuvalreuveni  staff  30675 Jul  7 18:57 DECISIONS.md
+
+--------------------------------------------------------------------------------
+$ DOIT_SESSION=demo doit "by creation time"
+# honest limitation: answer (no command run), offers modification time instead.
+
+The `ls` command on macOS does not support sorting by creation time directly.
+You can only sort by modification time. Would you like to sort by modification
+time instead?
+--------------------------------------------------------------------------------

@@ -6,6 +6,12 @@ build context -> ask the LPU for a Decision -> dispatch the chosen tool
 With max_steps=1 (Phase 1) this degenerates to single-command mode: one
 decision, carried out, done. Every turn is recorded in the session
 history under ~/.doit/sessions/.
+
+Phase 4 makes turns multi-turn aware: build_messages replays this
+session's last K turns into the context (context.history_messages), so a
+follow-up like "now sort them by date" resolves against the previous
+turn. The within-turn loop is unchanged; single-command mode still means
+one command per turn.
 """
 
 import os
@@ -19,7 +25,7 @@ from .config import Config, resolve_shell
 def run_turn(request: str, config: Config) -> None:
     """Handle one user request end to end, printing output as we go."""
     session_id = state.get_session_id()
-    messages = context.build_messages(request, config)
+    messages = context.build_messages(request, config, session_id)
     steps = []
     final_answer = None
 

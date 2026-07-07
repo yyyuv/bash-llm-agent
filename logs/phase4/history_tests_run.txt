@@ -1,0 +1,12 @@
+[PASS] hot_budget_default — len=4037
+[PASS] cold_smaller_than_hot — cold=1337 hot=4037
+[PASS] short_untouched
+[PASS] run_command_replay — roles=['user', 'assistant', 'user']
+[PASS] answer_replay
+[PASS] blocked_replay
+[PASS] history_uses_cold_budget — len=1344
+[PASS] only_last_k — kept=10 first=q5
+[PASS] no_history_empty
+[PASS] build_messages_order — n=6
+
+10/10 passed

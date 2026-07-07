@@ -356,8 +356,9 @@ ls -lc --sort=time ~/Documents             ← Linux caveat: true creation time 
 🔶 **DECISION 7 — how much of the command output goes into history context?**
 - **(a) Truncated real output (head+tail, as above).** Pro: follow-ups like "which of these is safe to delete?" (Section 9!) need the actual output; simple. Con: burns context tokens, especially painful for the 7–8B local models with smaller effective context.
 - **(b) Only metadata** (command, returncode, first 3 lines). Pro: tiny context. Con: kills Section 9 (output awareness) — the model can't discuss output it can't see; you'd need a "fetch full output" tool, adding complexity.
-- **(c) Adaptive**: full output for the most recent turn, metadata-only for older ones. Pro: best of both. Con: slightly more code.
-Recommendation: (c) — Section 9 needs the last output rich, older ones rarely matter in detail.
+- **(c) Adaptive (metadata cliff)**: full output for the most recent turn, metadata-only for older ones. Pro: best of both. Con: the cliff — an older turn's output becomes undiscussable, so a follow-up two turns later that refers back to it ("delete the ones from the *first* listing") has nothing to see.
+- **(d) Adaptive with tiered truncation — CHOSEN.** Two byte budgets instead of a metadata cliff: the *current/most-recent* turn keeps a rich truncated output (head ~3KB + tail ~1KB); *older* turns keep a compressed truncated output (head ~1KB + tail ~0.3KB) — still head+tail real content, just tighter. Pro: every past turn stays discussable (Section 9 works even for older outputs), while the 10× history multiplier is kept cheap; no "fetch full output" tool needed. Con: two constants instead of one, marginally more code than (c).
+Decision: **(d)**. Rationale (2026-07-07): the metadata-only floor in (c) kills output-awareness for anything but the last turn; tiered truncation preserves the gist of older outputs (a listing's start + any trailing error) at ~3K tokens for 10 turns, versus ~10K for uniform 4KB. Full untruncated output always remains on disk in `logs/`.
 
 ---
 
@@ -376,7 +377,7 @@ ls -lt        (sorting by modification date — say "creation date" if you meant
 
 That parenthetical costs the user nothing; a blocking question costs a context switch. This trade-off discussion belongs in the report.
 
-🔶 **DECISION 8 — unanswered questions.** User presses Enter on empty input / hits Ctrl-C / walks away:
+✅ **DECISION 8 — unanswered questions — CHOSEN: (a)** empty input → proceed with the stated default, combined with the destructive-vs-read-only split (destructive → abort, read-only → default); no timeout. (Not yet implemented — lands in Phase 5.) User presses Enter on empty input / hits Ctrl-C / walks away:
 - **(a) Empty input → proceed with the stated default** ("no answer — using modification date"). Pro: flows nicely; the default was already communicated. Con: for anything destructive this is dangerous — so combine: destructive → abort, read-only → default.
 - **(b) Empty input → abort the turn** ("cancelled; run doit again when you've decided"). Pro: maximally safe, simple. Con: annoying for harmless cases.
 - **(c) Add a timeout** (e.g. 60s → treat as (a)/(b)). Pro: handles walk-aways. Con: `input()` with timeout is fiddly (signals/select); little value for a CLI you're actively typing into.
@@ -542,7 +543,7 @@ Not elaborated here — PLAN.md §5–6 covers the skeleton. The three rules tha
 | 6 | Prompted format | JSON / tags | ✅ (a) JSON |
 | — | Chit-chat policy | comply / polite refusal | ✅ polite in-role refusal ("I'm a shell command agent") |
 | 7 | Output in history | truncated / metadata / adaptive | ⏸ deferred — discuss before Phase 4 |
-| 8 | Unanswered clarification | default / abort / timeout | ⏸ deferred |
+| 8 | Unanswered clarification | default / abort / timeout | ✅ (a) empty input → stated default, with destructive→abort / read-only→default split; no timeout |
 | 9 | Memory injection | all / filtered | ⏸ deferred |
 | 10 | Cross-session | summaries / fetch tool / both | ⏸ deferred |
 | 11 | Extension | multi-step / compaction / profiles | ⏸ deferred (after Phase 3 anyway) |

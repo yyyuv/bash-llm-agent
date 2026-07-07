@@ -1,0 +1,72 @@
+// doit v4 — multi-turn history (Phase 4)
+// Same single decision + safety gate as v2 (native adapter). The only new
+// element is the ForEach that replays this session's last K turns back into
+// the context BEFORE the current request — so a follow-up ("now sort them by
+// date") resolves against the previous turn. This ForEach is the one visual
+// diff to put next to v2 in the report.
+//
+// Design notes:
+//   - We do NOT classify follow-up vs. new command. With prior turns in
+//     context the LPU resolves references implicitly; a fresh, unrelated
+//     request simply doesn't latch onto anything above it. (PLAN Phase 4.)
+//   - Each past turn @t is replayed as PLAIN chat messages, not the native
+//     T: tool role: a cross-turn replay has no live tool_call_id to anchor a
+//     tool-role message to, and providers reject an orphan T:. So a past
+//     command's output comes back as U:, even in the native adapter — unlike
+//     the *within-turn* result of v2, which is a real T:.
+//   - D7 tiered truncation: the current turn's live output keeps the HOT
+//     budget (~3KB head + ~1KB tail); older turns replayed here use the COLD
+//     budget (~1KB + ~0.3KB). Full output always stays on disk in logs/.
+//
+// Code mapping:
+//   ForEach(@t ...) / replayTurn   <-> context.history_messages() + _replay_turn()
+//   HISTORY_TURNS (K)              <-> context.HISTORY_TURNS = 10
+//   loadRecentTurns               <-> state.load_recent_turns(session_id, K)
+//   truncate(cold)                <-> tools.truncate_for_context(x, COLD_HEAD, COLD_TAIL)
+//   build order                   <-> context.build_messages(request, config, session_id)
+//   sys.safety_check branch       <-> unchanged from v2 (doitlib/safety.py) — folded below
+
+DoitAgentV4History[@T]: {
+    S: {
+        AGENT_INSTRUCTIONS        // role, command style, safety + chit-chat policy (as v2)
+        AVAILABLE_TOOLS           // run_command(command, is_destructive, explanation), answer(text)
+    }
+    U: {
+        env.cwd
+        env.datetime
+        env.shell
+        env.os
+    }
+
+    // --- NEW in v4: replay the last K turns of THIS session as chat ---
+    // oldest first; env.history[@t] = one stored turn record (state.load_recent_turns).
+    ForEach(@t: range(1, @T-1)) {
+        U: env.history[@t].request                       // the past request, verbatim
+        ForEach(@i: env.history[@t].steps) {
+            If env.history[@t].steps[@i].ran {
+                A: env.history[@t].steps[@i].command      // "$ <command>" the model had chosen
+                U: truncate(env.history[@t].steps[@i].output)   // COLD budget; U: not T: (see note)
+            }
+            Else {
+                A: env.history[@t].steps[@i].blocked      // "(did not run — <reason>): <command>"
+            }
+        }
+        If env.history[@t].final_answer {
+            A: env.history[@t].final_answer               // the turn's closing answer, when it had one
+        }
+    }
+
+    // --- the current turn: identical decision + safety gate as v2 ---
+    U: env.user_request[@T]
+    A: sys.tool_call[@T.I]        // run_command(...) | answer(text)
+
+    If sys.tool_call == run_command {
+        If sys.safety_check.is_sudo        { T: sys.blocked }        // hard refusal
+        ElseIf sys.safety_check.is_interactive { T: sys.blocked }    // vim/less/bare ssh...
+        ElseIf sys.safety_check.is_destructive {
+            If sys.confirmed { T: truncate(sys.tool_response) }      // HOT budget (current turn)
+            Else             { T: sys.blocked }                      // declined_by_user
+        }
+        Else { T: truncate(sys.tool_response) }                      // read-only, runs immediately
+    }
+}

@@ -1,0 +1,56 @@
+{
+  "passed": 10,
+  "total": 10,
+  "results": [
+    {
+      "case": "hot_budget_default",
+      "pass": true,
+      "detail": "len=4037"
+    },
+    {
+      "case": "cold_smaller_than_hot",
+      "pass": true,
+      "detail": "cold=1337 hot=4037"
+    },
+    {
+      "case": "short_untouched",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "run_command_replay",
+      "pass": true,
+      "detail": "roles=['user', 'assistant', 'user']"
+    },
+    {
+      "case": "answer_replay",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "blocked_replay",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "history_uses_cold_budget",
+      "pass": true,
+      "detail": "len=1344"
+    },
+    {
+      "case": "only_last_k",
+      "pass": true,
+      "detail": "kept=10 first=q5"
+    },
+    {
+      "case": "no_history_empty",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "build_messages_order",
+      "pass": true,
+      "detail": "n=6"
+    }
+  ]
+}
