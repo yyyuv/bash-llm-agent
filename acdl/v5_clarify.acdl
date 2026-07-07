@@ -91,8 +91,12 @@ DoitAgentV5Clarify[@T, I]: {
             If sys.safety_check.is_sudo        { T: sys.blocked }
             ElseIf sys.safety_check.is_interactive { T: sys.blocked }
             ElseIf sys.safety_check.is_destructive {
-                If sys.confirmed { T: truncate(sys.tool_response) }   // HOT budget
-                Else             { T: sys.blocked }                   // declined / empty-on-destructive
+                If sys.confirmed {
+                    T: truncate(sys.tool_response)             // HOT budget
+                }
+                Else {
+                    T: sys.blocked                            // declined / empty-on-destructive
+                }
             }
             Else { T: truncate(sys.tool_response) }                   // read-only, runs immediately
             // single-command mode: command_steps == max_steps ends the turn
