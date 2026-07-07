@@ -1,0 +1,74 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Current state
+
+This is a **university assignment (Assignment 3, "Class 9 — LLM Systems")**, currently at the planning stage. The only files are [PLAN.md](PLAN.md) (compact reference) and [PLAN_DETAILED.md](PLAN_DETAILED.md) (plain-language elaboration with rationale). **No code exists yet.** Read both plans before implementing anything — they contain locked design decisions, an intended repo layout, and a phase-by-phase build order that grading depends on.
+
+The deliverable is `doit`: an agentic shell tool. You type an English request in your terminal; it decides which shell command(s) to run and runs them. Grading rewards the harder "agentic" parts (memory, user shell-history awareness, multi-terminal sessions, an extension) **and** ACDL documentation written *as you go* — retrofitted docs are explicitly penalized.
+
+## The one non-negotiable architectural principle
+
+`doit` is a **Controller wrapping an LPU** (LLM). The LLM only ever sees text and emits a *structured decision* (tool name + args); it never acts. The Python Controller owns the loop, all state, tool execution, and safety. Keep this separation strict — every feature is either a **tool**, a piece of **context**, or **controller logic**, nothing else. Violating it forces rewrites later.
+
+## Core design (locked decisions)
+
+**Five tools only** — the tool set *is* the decision schema, the single contract all models code against. Do NOT add a tool per shell command (`ls`/`grep`/`git`); the shell string in `run_command` is the universal tool.
+
+| tool | args | purpose |
+|---|---|---|
+| `run_command` | `command, is_destructive, explanation` | translate & execute; `is_destructive` flag is layer 1 of safety |
+| `answer` | `text` | talk without executing; also the **finish** signal that ends the loop |
+| `ask_user` | `question, options[]` | clarification, resolved *within the same invocation* (a loop iteration, not a new `doit` call) |
+| `remember` / `forget` | `fact` / `id` | persistent memory |
+| `change_dir` | `path` | special-cased `cd` (see below) |
+
+Multiple tool calls may occur in one turn (e.g. `change_dir` then `remember`).
+
+**The `cd` trap** — a Python subprocess *cannot* change the parent shell's cwd. Solution: `change_dir` validates the path and writes it to `~/.doit/cd_target_$DOIT_SESSION`; a shell **function wrapper** (installed via the bashrc/zshrc snippet) reads that note after `doit` exits and performs the real `cd` inside the shell. Also record new cwd in session state. This is the most-likely-to-bite mechanism — understand it before touching `change_dir` or the shell snippets.
+
+**Two-layer safety** (defense in depth): (1) the model self-reports `is_destructive` + `explanation` in the same JSON; (2) a deterministic Python regex guard *overrides* the model when a "read-only" command actually contains write/destructive patterns (`rm|mv|cp|mkdir|touch|chmod|dd|>|>>|tee|sed -i|git (commit|push|reset|clean)|sudo|find -delete`, etc.). Never trust a 7B model alone with `rm -rf`. Destructive → print command + explanation → require `y`; abort is recorded in history so "actually yes" works next turn. Refuse interactive commands (`vim`, `top`) and never run `sudo`.
+
+**Model flexibility via two adapters** behind one `Decision` dataclass — the controller never knows which ran:
+- *native adapter*: LiteLLM tool-calling (`openai/gpt-4o-mini`, `ollama/mistral:7b`).
+- *prompted adapter*: for models without tool-calling (`ollama/llama3:8b`) — tool schemas + "reply ONLY with JSON" in the system prompt, robust JSON extraction (strip markdown fences, regex first `{...}`, one retry feeding the parse error back).
+
+This adapter split *is* the "model flexibility" section and the model-comparison report.
+
+**Chit-chat policy**: off-domain requests (jokes) get a polite **in-role refusal**, not compliance. "How do I X?" shell questions stay in scope (answer without running).
+
+## Intended structure
+
+```
+doit                     # entry point: python, no extension, chmod +x, #!/usr/bin/env python3, on PATH
+doitlib/
+  config.py              # reads ~/doit.cfg — model, provider, temperature, max_steps. Switch model = one line.
+  llm.py                 # call(messages, tools) -> Decision; the two adapters live here
+  context.py             # assembles the message list; each function maps 1:1 to an ACDL variable (this IS the ACDL)
+  controller.py          # the loop: build context -> LPU -> dispatch tool -> append observation -> repeat until answer/step cap (~8). Single-command mode = max_steps=1.
+  tools.py               # tool impls; run_command captures stdout/stderr/rc, timeout, truncates to ~4KB for context (full output on disk)
+  safety.py              # the regex guard
+  state.py               # everything under ~/.doit/
+acdl/                    # v1..v9 specs + rendered screenshots (one per phase)
+prompts/                 # prompt templates as files
+shell/bashrc_snippet.sh  shell/zshrc_snippet.sh
+tests/cases.md           # ~15 fixed cases run against all 3 models
+report/
+```
+
+**State layout under `~/.doit/`** (keyed by `DOIT_SESSION`, an 8-char per-terminal id):
+- `sessions/<id>.jsonl` — one record per turn: `{ts, cwd, request, steps:[{tool,args,stdout,stderr,rc}], final_answer}`
+- `memories.json` — `[{id, ts, text}]`
+- `shell_hist/<id>` — `ts|cwd|cmd` lines written by the PROMPT_COMMAND (bash) / `precmd`+`fc` (zsh) hook; used for "user awareness". Distinguish user-run vs doit-run commands by cross-referencing the session jsonl.
+- `logs/` — full raw LLM requests/responses (report evidence).
+
+## Build order
+
+Follow the phased order in [PLAN.md](PLAN.md) §2 (Phase 0 skeleton → Phase 9 extension → Phase 10 report). **Decisions are locked only through Phase 3; Phases 4–9 need joint review before starting** (see the ⏸ scope note in PLAN.md). Each phase is a phase gate: it is not "done" without its `.acdl` spec and 2–3 logged test interactions committed. The chosen extension (Phase 9) is **command plans / multi-step execution** (`max_steps>1` with failure recovery + plan-preview confirmation for destructive sequences).
+
+## Conventions
+
+- **Dual-shell**: auto-detect `$SHELL` (overridable in `doit.cfg`); context includes shell type + OS so the LLM emits portable commands. Both shell snippets write the identical `ts|cwd|cmd` history format.
+- **ACDL** (the documentation language, graded): `@T` = turn, `@T.I` = step within turn; `ALL_CAPS` for templates, `camelCase` for functions, `sys/env/resp` namespaces, `T:` role for tool results. Paste specs into the live editor (`https://acdlang26.github.io/acdlsite/visualizer.html`) and screenshot for the report. Because `context.py` is built from named functions, each maps to exactly one ACDL element — preserve that mapping.
+- API keys come from env vars, never the repo.
