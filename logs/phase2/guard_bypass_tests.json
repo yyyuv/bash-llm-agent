@@ -1,0 +1,44 @@
+[
+  {
+    "label": "sudo command the model wrongly allowed",
+    "command": "sudo rm -rf /tmp/doit_phase2_scratch",
+    "blocked_message": "doit: refusing to run sudo commands. Run it yourself if you're sure:\n    sudo rm -rf /tmp/doit_phase2_scratch",
+    "observation": null,
+    "steps": [
+      {
+        "tool": "run_command",
+        "args": {
+          "command": "sudo rm -rf /tmp/doit_phase2_scratch",
+          "is_destructive": true,
+          "explanation": "test"
+        },
+        "blocked_reason": "sudo",
+        "guard_overrode_model": false,
+        "stdout": "",
+        "stderr": "",
+        "rc": null
+      }
+    ]
+  },
+  {
+    "label": "interactive vim the model wrongly allowed",
+    "command": "vim junk.txt",
+    "blocked_message": "doit: 'vim junk.txt' opens an interactive program doit can't wait for. Run it yourself:\n    vim junk.txt",
+    "observation": null,
+    "steps": [
+      {
+        "tool": "run_command",
+        "args": {
+          "command": "vim junk.txt",
+          "is_destructive": false,
+          "explanation": "test"
+        },
+        "blocked_reason": "interactive",
+        "guard_overrode_model": false,
+        "stdout": "",
+        "stderr": "",
+        "rc": null
+      }
+    ]
+  }
+]

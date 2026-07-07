@@ -1,0 +1,47 @@
+// doit v2 — adds the safety/confirm branch (Phase 2)
+// Same single-decision turn as v1, but a run_command decision now passes
+// through a deterministic safety gate before anything executes. This
+// gate is pure controller logic — no LPU call — so it renders as an
+// If/Else branch right after the tool_call, not as more prompt content.
+//
+// Code mapping:
+//   sys.safety_check   <-> safety.check_command()        (doitlib/safety.py)
+//   sys.confirm         <-> controller._confirm_destructive()
+//   The whole If/Else   <-> controller._handle_run_command()
+// Layer 1 (the model's own is_destructive flag) is still part of
+// sys.tool_call's args, as in v1 — sys.safety_check treats it only as a
+// lower bound and can never be talked down by the model.
+
+DoitAgentV2: {
+    S: {
+        AGENT_INSTRUCTIONS        // now also states: destructive commands get a human y/N gate, so don't under-write out of caution
+        AVAILABLE_TOOLS           // run_command(command, is_destructive, explanation), answer(text)
+    }
+    U: {
+        env.cwd
+        env.datetime
+        env.shell
+        env.os
+    }
+    U: env.user_request
+    A: sys.tool_call              // run_command(...) | answer(text)
+
+    If (sys.tool_call == run_command) {
+        sys.safety_check(sys.tool_call.command)          // layer 2: deterministic regex guard, overrides a false "safe"
+
+        If (sys.safety_check.is_sudo) {
+            T: sys.blocked("sudo")                        // hard refusal, no confirmation possible
+        } Else If (sys.safety_check.is_interactive) {
+            T: sys.blocked("interactive")                 // vim/nano/top/less/bare ssh/bare python — would hang subprocess capture
+        } Else If (sys.safety_check.is_destructive) {
+            sys.confirm(sys.tool_call.command, sys.tool_call.explanation)   // prints command + explanation, reads "y"/anything else
+            If (sys.confirmed) {
+                T: sys.tool_response                       // executed; stdout/stderr/rc captured as in v1
+            } Else {
+                T: sys.blocked("declined_by_user")          // recorded so a later turn's "actually yes" can reference it
+            }
+        } Else {
+            T: sys.tool_response                            // read-only, runs immediately as in v1
+        }
+    }
+}

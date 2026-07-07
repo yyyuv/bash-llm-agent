@@ -1,0 +1,167 @@
+[
+  {
+    "command": "ls -la",
+    "model_says_destructive": false,
+    "note": "plain read-only",
+    "guard_result": {
+      "is_destructive": false,
+      "guard_overrode_model": false,
+      "is_sudo": false,
+      "is_interactive": false
+    }
+  },
+  {
+    "command": "rm file.txt",
+    "model_says_destructive": false,
+    "note": "model under-flagged an obvious delete; guard must override",
+    "guard_result": {
+      "is_destructive": true,
+      "guard_overrode_model": true,
+      "is_sudo": false,
+      "is_interactive": false
+    }
+  },
+  {
+    "command": "ls > files.txt",
+    "model_says_destructive": false,
+    "note": "sneaky redirect turns a read command into a write",
+    "guard_result": {
+      "is_destructive": true,
+      "guard_overrode_model": true,
+      "is_sudo": false,
+      "is_interactive": false
+    }
+  },
+  {
+    "command": "cat a.txt | tee b.txt",
+    "model_says_destructive": false,
+    "note": "tee writes despite looking like a read pipeline",
+    "guard_result": {
+      "is_destructive": true,
+      "guard_overrode_model": true,
+      "is_sudo": false,
+      "is_interactive": false
+    }
+  },
+  {
+    "command": "find . -name \"*.tmp\" -delete",
+    "model_says_destructive": false,
+    "note": "find -delete",
+    "guard_result": {
+      "is_destructive": true,
+      "guard_overrode_model": true,
+      "is_sudo": false,
+      "is_interactive": false
+    }
+  },
+  {
+    "command": "sudo rm -rf /",
+    "model_says_destructive": true,
+    "note": "sudo must be flagged regardless of model",
+    "guard_result": {
+      "is_destructive": true,
+      "guard_overrode_model": false,
+      "is_sudo": true,
+      "is_interactive": false
+    }
+  },
+  {
+    "command": "vim file.txt",
+    "model_says_destructive": false,
+    "note": "always-interactive editor",
+    "guard_result": {
+      "is_destructive": false,
+      "guard_overrode_model": false,
+      "is_sudo": false,
+      "is_interactive": true
+    }
+  },
+  {
+    "command": "less file.txt",
+    "model_says_destructive": false,
+    "note": "always-interactive pager",
+    "guard_result": {
+      "is_destructive": false,
+      "guard_overrode_model": false,
+      "is_sudo": false,
+      "is_interactive": true
+    }
+  },
+  {
+    "command": "ssh myhost",
+    "model_says_destructive": false,
+    "note": "bare ssh drops into a remote shell -> interactive",
+    "guard_result": {
+      "is_destructive": false,
+      "guard_overrode_model": false,
+      "is_sudo": false,
+      "is_interactive": true
+    }
+  },
+  {
+    "command": "ssh myhost ls",
+    "model_says_destructive": false,
+    "note": "ssh with a command is non-interactive -> should NOT be flagged",
+    "guard_result": {
+      "is_destructive": false,
+      "guard_overrode_model": false,
+      "is_sudo": false,
+      "is_interactive": false
+    }
+  },
+  {
+    "command": "python3 script.py",
+    "model_says_destructive": false,
+    "note": "python with a script arg is non-interactive",
+    "guard_result": {
+      "is_destructive": false,
+      "guard_overrode_model": false,
+      "is_sudo": false,
+      "is_interactive": false
+    }
+  },
+  {
+    "command": "python3",
+    "model_says_destructive": false,
+    "note": "bare python drops into a REPL -> interactive",
+    "guard_result": {
+      "is_destructive": false,
+      "guard_overrode_model": false,
+      "is_sudo": false,
+      "is_interactive": true
+    }
+  },
+  {
+    "command": "git commit -m x",
+    "model_says_destructive": false,
+    "note": "git commit is destructive",
+    "guard_result": {
+      "is_destructive": true,
+      "guard_overrode_model": true,
+      "is_sudo": false,
+      "is_interactive": false
+    }
+  },
+  {
+    "command": "git log",
+    "model_says_destructive": false,
+    "note": "git log is read-only",
+    "guard_result": {
+      "is_destructive": false,
+      "guard_overrode_model": false,
+      "is_sudo": false,
+      "is_interactive": false
+    }
+  },
+  {
+    "command": "grep \"rm -rf\" notes.txt",
+    "model_says_destructive": false,
+    "note": "known false-positive risk: 'rm -rf' appears inside a string literal",
+    "guard_result": {
+      "is_destructive": true,
+      "guard_overrode_model": true,
+      "is_sudo": false,
+      "is_interactive": false
+    }
+  }
+]

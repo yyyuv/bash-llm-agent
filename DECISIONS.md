@@ -82,5 +82,26 @@ Open threads from Phase 0+1 that later phases should re-examine, not just this f
 - **`is_destructive` self-report reliability** — Phase 1 only saw one destructive case (`echo > test.txt`, correctly flagged true). Phase 2's regex guard needs a real adversarial test set (pipes hiding writes, `find -delete`, `git reset`) before trusting the flag's accuracy number in the report.
 - **Environment friction (P1g) as a report figure** — Phases 4–9 will add more shell-side state (shell_hist hook, cd wrapper); each new piece of shell integration is a new place for PATH/env-export surprises like the three above. Worth keeping a running list rather than rediscovering the pattern each phase.
 
+## Phase 2 — 2026-07-07
+
+### P2a — safety.py structure: SafetyCheck is the guard's own verdict, not a patch on the model's
+Chosen: `check_command()` returns `is_destructive` as the guard's own determination (`model_flag OR regex_match`), plus a separate `guard_overrode_model` bool for reporting. The model's flag can only raise destructiveness, never lower it — matches D5/P1's "guard overrides a false safe claim" design exactly.
+Rejected: mutating/returning the model's own flag in place — loses the "how often did the guard actually catch something" metric the report needs.
+
+### P2b — three-way outcome from `_handle_run_command`, not a single boolean gate
+Chosen: sudo and interactive commands are hard-refused with no prompt at all (never executable, ever); only genuine destructive-but-legal commands get the `y`/`N` confirmation. Encoded as ordered checks (sudo → interactive → destructive → safe) in `controller._handle_run_command`, each with its own `blocked_reason` recorded in session history.
+Rationale: PLAN.md draws this distinction explicitly ("never sudo", "refuse interactive", vs. "destructive → confirm") — collapsing them into one flow would blur a policy difference (no-means-no vs. ask-first) that the report should show clearly.
+
+### P2c — bug found + fixed: `ssh` bare-vs-command detection
+Observed during the safety-guard unit tests (logs/phase2/safety_guard_tests.py): my first pass classified any `ssh` invocation as interactive only when it had *exactly one token total* — so `ssh myhost` (2 tokens: program + hostname, no remote command, genuinely interactive) was wrongly let through as non-interactive. Root cause: `ssh` differs from `python`/`mysql`/`psql`, which really are bare with zero arguments; `ssh` is "bare" up to and including the hostname.
+Fix: `ssh` gets its own check — strip flag tokens (leading `-`), and treat it as interactive when 0 or 1 non-flag tokens remain (nothing, or just a host). Verified via the unit test: `ssh myhost` → interactive=True, `ssh myhost ls` → interactive=False.
+Known residual limitation (documented in code, not fixed): a flag taking a separate value, e.g. `ssh -p 2222 myhost`, is misparsed as a 2-word command and wrongly treated as non-interactive. Accepted as out of scope — a full ssh option table is not worth building for this assignment; flagged in the report's limitations chapter alongside the `grep "rm -rf"` false positive (P2d).
+
+### P2d — accepted false positive: `grep "rm -rf" notes.txt`
+Confirmed via the unit test suite: a string literal containing `rm -rf` (e.g. inside a `grep` pattern) trips the guard's `\brm\b` pattern and gets flagged destructive, even though the command is purely read-only. This is the exact case PLAN_DETAILED.md's Decision 5 discussion calls out as an accepted tradeoff of the regex approach (vs. a smarter parser). Left as-is — one extra `y` confirmation on a false positive is a far cheaper failure mode than a false negative on a real `rm -rf`.
+
+### Observed (Phase 2 tests, gpt-4o-mini)
+All 12 cases in tests/cases.md pass (logs/phase2/). Notably, gpt-4o-mini never itself attempted a sudo or interactive command in live testing — it already declines those via `answer`, per the system prompt (P1 already established this policy-following behavior). That means the sudo/interactive **guard** code paths were only exercised by directly calling `controller._handle_run_command()` with a hand-built Decision simulating a model that ignored the policy (logs/phase2/guard_bypass_tests.json) — this is the correct way to test defense-in-depth (you must simulate layer 1 failing to prove layer 2 catches it), and worth stating plainly in the report rather than claiming "tested" from live runs that never actually triggered the code path.
+
 ### Process: this file's ownership
 Originally planned as user-written-only (defense insurance). Changed by Yuval's request: Claude creates and maintains it, adding entries whenever a decision is made or revised during work; Yuval reviews and edits. The insurance now comes from review, not authorship — read every entry critically.
