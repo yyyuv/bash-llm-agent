@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+"""doit — an agentic shell assistant.
+
+You type a request in plain English; doit asks an LLM which tool to use
+(run a shell command, or just answer in text) and carries it out.
+
+Usage:
+    doit <what you want done, in plain English>
+
+Example:
+    doit "show me all files here, including hidden ones"
+"""
+
+import os
+import sys
+from pathlib import Path
+
+# Make doitlib importable when doit is invoked via a symlink on PATH.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from doitlib.config import load_config
+from doitlib.controller import run_turn
+
+
+def main() -> int:
+    """Parse the command line and handle one request."""
+    request = " ".join(sys.argv[1:]).strip()
+    if not request:
+        print(__doc__.strip(), file=sys.stderr)
+        return 2
+
+    config = load_config()
+    try:
+        run_turn(request, config)
+    except KeyboardInterrupt:
+        print("\ndoit: interrupted", file=sys.stderr)
+        return 130
+    except Exception as error:  # show a clean message instead of a traceback
+        if os.environ.get("DOIT_DEBUG"):
+            raise
+        print(f"doit: error: {error}", file=sys.stderr)
+        print("doit: set DOIT_DEBUG=1 for the full traceback", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

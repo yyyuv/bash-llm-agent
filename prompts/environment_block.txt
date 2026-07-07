@@ -1,0 +1,5 @@
+Environment:
+- current directory: {cwd}
+- date/time: {datetime}
+- shell: {shell}
+- OS: {os_name}

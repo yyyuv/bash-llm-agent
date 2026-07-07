@@ -1,0 +1,28 @@
+// doit v1 — single-command agent (Phase 1)
+// One turn, one LPU decision (max_steps = 1): the LPU either issues one
+// run_command or one answer. No history, memory, or safety branch yet.
+//
+// Code mapping (doitlib/context.py builds the context; each element
+// below is exactly one function there):
+//   AGENT_INSTRUCTIONS  <-> context.agent_instructions()   (prompts/system_prompt.txt)
+//   env.* block         <-> context.environment_block()    (prompts/environment_block.txt)
+//   env.user_request    <-> context.user_request()
+//   sys.tool_call       <-> the Decision returned by llm.call()
+// AVAILABLE_TOOLS is passed out-of-band via native tool calling
+// (tools.TOOL_SCHEMAS), not as prompt text — the prompted adapter in
+// Phase 3 will move it into S: as text.
+
+DoitAgentV1: {
+    S: {
+        AGENT_INSTRUCTIONS        // role, command style rules, chit-chat refusal policy
+        AVAILABLE_TOOLS           // run_command(command, is_destructive, explanation), answer(text)
+    }
+    U: {
+        env.cwd
+        env.datetime
+        env.shell
+        env.os
+    }
+    U: env.user_request
+    A: sys.tool_call              // run_command(...) executed by controller | answer(text) shown to user
+}

@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current state
 
-This is a **university assignment (Assignment 3: Agents — an agentic shell tool called `doit`)**, currently at the planning stage. The only files are [PLAN.md](PLAN.md) (compact reference) and [PLAN_DETAILED.md](PLAN_DETAILED.md) (plain-language elaboration with rationale). **No code exists yet.**
+This is a **university assignment (Assignment 3: Agents — an agentic shell tool called `doit`)**. Plans: [PLAN.md](PLAN.md) (compact reference) and [PLAN_DETAILED.md](PLAN_DETAILED.md) (rationale).
+
+**Phases 0–1 are complete** (2026-07-07): `doit` entry point (executable, symlinked into `~/.local/bin`), `doitlib/` (config, state, llm with the native adapter, context, tools `run_command`+`answer`, controller with `max_steps=1`), prompt templates in `prompts/`, [acdl/v1_single.acdl](acdl/v1_single.acdl), 5 logged test interactions in [logs/phase1/](logs/phase1/) (all passing on `openai/gpt-4o-mini`). Notes: deps installed via `pip3 install --user litellm` on system Python 3.9; `OPENAI_API_KEY` lives in a gitignored `.env` at the repo root (source it before running). **Next: Phase 2 (safety — regex guard + confirmation flow).**
 
 > **Maintenance rule:** update this "Current state" section at the end of every completed phase (what exists, what phase is next). A stale CLAUDE.md misleads future sessions.
 
@@ -70,6 +72,10 @@ report/
 ## Build order
 
 Follow the phased order in [PLAN.md](PLAN.md) §2 (Phase 0 skeleton → Phase 9 extension → Phase 10 report). **Decisions are locked only through Phase 3; Phases 4–9 need joint review before starting** (see the ⏸ scope note in PLAN.md). Each phase is a phase gate: it is not "done" without its `.acdl` spec and 2–3 logged test interactions committed. **The Phase 9 extension choice (Decision 11) is deferred — do not assume one; it will be decided after Phase 3.**
+
+## Workflow rules
+
+- **Claude never commits.** Git commits are made by the user only. When a phase/part is finished, Claude ends with: (1) a summary of what was built, (2) exact instructions for the user to run and check it themselves, (3) what comes next.
 
 ## Ownership
 

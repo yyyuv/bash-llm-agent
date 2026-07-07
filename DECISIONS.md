@@ -43,5 +43,32 @@ Noted risk: assignment says "respond nicely" to such requests, which could be re
 ### Scope gate
 Decisions locked through Phase 3 only. Phases 4–9 drafted in PLAN_DETAILED.md but pending joint review. Open: D7 (output in history), D8 (unanswered clarifications), D9 (memory injection), D10 (cross-session awareness), D11 (extension choice — decide after Phase 3, once local-model competence is known).
 
+## Phase 0 + 1 — 2026-07-07
+
+### P1a — every LLM reply must be a tool call (`tool_choice="required"`)
+Chosen: the native adapter forces a tool call, so `answer` is genuinely the only way to talk and the controller never parses free text. A plain-text reply (should the provider ignore the constraint) is defensively wrapped as an `answer` Decision.
+Rejected: allowing free-text replies alongside tool calls — two output channels would complicate the loop and the ACDL for no benefit.
+
+### P1b — Decision carries the provider message (`assistant_message`, `tool_call_id`)
+Chosen: `llm.call()` returns the raw assistant message alongside `{tool_name, args}`, so the controller can append tool results using the provider's native tool protocol. Unused at `max_steps=1` but makes Phases 4–5 (multi-step, ask_user) a config change, not a rewrite.
+Rejected: re-serializing tool results as plain user messages — breaks native tool-calling models' expectations.
+
+### P1c — environment block is its own user message
+Two consecutive `U:` messages (env block, then request) instead of one concatenated message, preserving the 1:1 `context.py` function ↔ ACDL element mapping. OpenAI accepts consecutive user messages.
+
+### P1d — session id fallback
+`DOIT_SESSION` unset → session id `"default"` so doit works before the shell snippet exists (snippet arrives with the cd wrapper). The D1 one-time warning is deferred to that phase too.
+
+### P1e — environment/install choices
+System Python 3.9.6 + `pip3 install --user litellm` (no venv — the `#!/usr/bin/env python3` shebang then just works); entry point symlinked into `~/.local/bin`. `OPENAI_API_KEY` lives in a gitignored `.env` at the repo root, sourced by the shell — never committed.
+
+### Observed (Phase 1 tests, gpt-4o-mini)
+All 5 cases in tests/cases.md behaved correctly (logs/phase1/). One nuance: "make my laptop fly" was refused as *off-topic* rather than explained as *impossible* — acceptable behavior, but track it in the Phase 3 model comparison.
+
+### P1f — system prompt fix: "edit" was misread as opening an interactive editor
+Observed: `doit "edit test.txt file to say hello"` returned `answer` (just described `echo "hello" > test.txt`) instead of running it, while `doit "write in test.txt 'abc'"` correctly ran. Root cause: the interactive-programs rule ("never run vim, nano...") made the model treat "edit" as edit-in-an-editor and back off to explaining.
+Chosen: two prompt additions in prompts/system_prompt.txt — (1) an explicit line that concrete actions (create/write/edit/move/delete/install/...) must use `run_command`, not `answer`; (2) a carve-out on the interactive-programs rule stating that changing a file's contents via non-interactive commands (echo/redirection, sed, heredoc) does not count as "interactive." Fix #1 alone was insufficient; #2 resolved it. Re-verified: joke refusal and "how do I see hidden files?" still behave correctly (no regression).
+Rationale for keeping this in the report: a good example of a genuine word-sense ambiguity a 7B prompted-adapter model may hit even harder in Phase 3 — worth re-testing there.
+
 ### Process: this file's ownership
 Originally planned as user-written-only (defense insurance). Changed by Yuval's request: Claude creates and maintains it, adding entries whenever a decision is made or revised during work; Yuval reviews and edits. The insurance now comes from review, not authorship — read every entry critically.
