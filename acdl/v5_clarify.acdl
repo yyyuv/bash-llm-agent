@@ -1,0 +1,103 @@
+// doit v5 — clarifications + richer interactions (Phase 5)
+// Builds on v4 (multi-turn history replay, native adapter). Two new things:
+//   1. a third tool, ask_user(question, options?), and
+//   2. a WITHIN-TURN loop: ask_user does NOT end the turn — the controller
+//      prints the question, blocks on input(), feeds the reply back as the
+//      tool result, and re-calls the LPU. So @T.I now really ranges over
+//      several steps in one turn (Class 9's step-within-turn @T.I), where in
+//      v1–v4 it was effectively a single step. That loop is the visual diff
+//      to place next to v4 in the report.
+//
+// Richer interactions (Section 7) need NO new element: "how do I X" is just
+// answer, and "modify it" / "execute it" resolve through the v4 history
+// replay above (the model lifts a command out of its own past answer). So
+// this spec is v4 + the ask_user branch, nothing else.
+//
+// Design notes:
+//   - Non-annoyance is enforced in TWO places: the prompt policy (ask only
+//     if a wrong guess is destructive OR interpretations differ materially),
+//     AND a hard structural cap MAX_CLARIFICATIONS=2 in the controller —
+//     past it the model is told to commit to its best guess (belt & braces).
+//   - Unanswered clarification (DECISION 8, option a): empty input / EOF →
+//     tell the model "no answer, use your stated default". Safety is NOT
+//     weakened by proceeding: if the default yields a destructive command,
+//     the run_command confirmation below still demands an explicit "y" — so
+//     "destructive → abort, read-only → default" falls out of the EXISTING
+//     safety gate, not a second check at ask time. Ctrl-C aborts the turn.
+//   - A clarification is not a command step: it does not consume max_steps.
+//
+// Code mapping:
+//   AVAILABLE_TOOLS + ask_user       <-> tools.TOOL_SCHEMAS (run_command, ask_user, answer)
+//   ask_user branch / loop           <-> controller._handle_ask_user + the run_turn loop
+//   _prompt_user (numbered options)  <-> controller._prompt_user
+//   MAX_CLARIFICATIONS               <-> controller.MAX_CLARIFICATIONS = 2
+//   reply fed back as tool result    <-> controller._append_tool_result (T: native / U: prompted)
+//   ask_user replayed in history     <-> context._replay_turn (asked / answered lines)
+//   everything else                  <-> unchanged from v4
+
+DoitAgentV5Clarify[@T, I]: {
+    S: {
+        AGENT_INSTRUCTIONS        // role, command style, safety + chit-chat + WHEN-TO-ASK policy
+        AVAILABLE_TOOLS           // run_command(command, is_destructive, explanation),
+                                  // ask_user(question, options?), answer(text)
+    }
+    U: {
+        env.cwd
+        env.datetime
+        env.shell
+        env.os
+    }
+
+    // --- replay the last K turns of THIS session as chat (unchanged from v4) ---
+    ForEach(@t: range(1, @T-1)) {
+        U: env.history[@t].request
+        ForEach(@i: env.history[@t].steps) {
+            If env.history[@t].steps[@i].tool == ask_user {
+                A: env.history[@t].steps[@i].question       // "(asked) <question>"
+                U: env.history[@t].steps[@i].reply          // "(answered) <reply>" | "(no answer)"
+            }
+            ElseIf env.history[@t].steps[@i].ran {
+                A: env.history[@t].steps[@i].command        // "$ <command>"
+                U: truncate(env.history[@t].steps[@i].output)   // COLD budget
+            }
+            Else {
+                A: env.history[@t].steps[@i].blocked        // "(did not run — <reason>): <command>"
+            }
+        }
+        If env.history[@t].final_answer {
+            A: env.history[@t].final_answer
+        }
+    }
+
+    // --- the current turn: now a real multi-step loop over I ---
+    U: env.user_request[@T]
+    ForEach(@i: range(1, I)) {                              // steps taken so far this turn
+        A: sys.tool_call[@T.i]                             // run_command | ask_user | answer
+
+        If sys.tool_call[@T.i] == ask_user {
+            If sys.clarifications >= MAX_CLARIFICATIONS {
+                T: sys.clarification_capped                 // "limit reached — commit to best guess"
+            }
+            ElseIf sys.user_reply[@T.i] == empty {
+                T: sys.no_answer_default                    // "no answer — use your stated default"
+            }
+            Else {
+                T: sys.user_reply[@T.i]                     // "The user answered: <reply>"
+            }
+            // loop continues: re-call the LPU with the reply appended
+        }
+
+        ElseIf sys.tool_call[@T.i] == run_command {
+            If sys.safety_check.is_sudo        { T: sys.blocked }
+            ElseIf sys.safety_check.is_interactive { T: sys.blocked }
+            ElseIf sys.safety_check.is_destructive {
+                If sys.confirmed { T: truncate(sys.tool_response) }   // HOT budget
+                Else             { T: sys.blocked }                   // declined / empty-on-destructive
+            }
+            Else { T: truncate(sys.tool_response) }                   // read-only, runs immediately
+            // single-command mode: command_steps == max_steps ends the turn
+        }
+
+        // answer ends the turn (the finish signal).
+    }
+}

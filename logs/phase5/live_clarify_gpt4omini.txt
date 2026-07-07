@@ -1,0 +1,29 @@
+Phase 5 gate evidence — live clarification transcript (ask_user, decline path)
+Model: openai/gpt-4o-mini (native adapter)   Session: DOIT_SESSION=demo5   Date: 2026-07-07
+
+Demonstrates (Section 6 / case 23): (1) an ambiguous destructive request triggers
+the ask_user tool instead of a blind command; (2) options render as a numbered menu;
+(3) typing "2" resolves to the option TEXT ("No"), not the digit, and is fed back to
+the model; (4) the model then closes with a graceful `answer` and nothing is executed.
+This is the DECLINE path. The stacked-safety path (answer 1/Yes → run_command → the
+Phase 2 "⚠ Proceed? [y/N]" gate) is case 24, still to be captured.
+
+--------------------------------------------------------------------------------
+$ set -a; source .env; set +a
+$ DOIT_SESSION=demo5 doit "delete the logs"
+
+Are you sure you want to delete the logs? This action cannot be undone.
+  1. Yes
+  2. No
+Your answer (number or text): 2
+
+The logs will not be deleted as per your request.
+--------------------------------------------------------------------------------
+
+Notes:
+- The within-turn loop worked: ask_user did NOT end the turn — the reply ("No",
+  resolved from menu choice 2 by controller._prompt_user) was fed back and the LPU
+  was re-called, which then chose `answer`. A clarification is not a command step,
+  so single-command mode was preserved.
+- No run_command was ever emitted, so neither safety layer was reached — correct for
+  a decline.

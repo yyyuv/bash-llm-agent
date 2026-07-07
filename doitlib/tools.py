@@ -1,10 +1,11 @@
 """The tools the LPU can invoke, and their schemas.
 
 The tool set IS the decision schema — the single contract every model
-codes against (PLAN.md §1). Phase 1 ships two tools:
+codes against (PLAN.md §1). The tools grow by phase:
 
-    run_command  execute one shell command
+    run_command  execute one shell command                        (Phase 1)
     answer       reply in plain text; also the signal that ends the loop
+    ask_user     ask one clarifying question, resolved in-loop     (Phase 5)
 
 Schemas use the OpenAI function-calling format, which LiteLLM accepts
 for every provider.
@@ -56,6 +57,43 @@ TOOL_SCHEMAS = [
                     },
                 },
                 "required": ["command", "is_destructive", "explanation"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "ask_user",
+            "description": (
+                "Ask the user one short clarifying question and wait for "
+                "their reply before continuing. Use this SPARINGLY — only "
+                "when a wrong guess would touch different files with a "
+                "destructive action, or when reasonable interpretations lead "
+                "to materially different results and none is clearly the "
+                "common one. Otherwise pick the most common interpretation, "
+                "act, and state your assumption in the answer instead of "
+                "asking."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": (
+                            "The single question to ask. State the default "
+                            "you will use if the user does not answer."
+                        ),
+                    },
+                    "options": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Optional list of concrete choices; shown to the "
+                            "user as a numbered menu they can pick by number."
+                        ),
+                    },
+                },
+                "required": ["question"],
             },
         },
     },

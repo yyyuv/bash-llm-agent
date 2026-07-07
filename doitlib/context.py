@@ -78,6 +78,14 @@ def _replay_turn(turn: dict) -> list:
     """
     messages = [{"role": "user", "content": turn.get("request", "")}]
     for step in turn.get("steps", []):
+        if step.get("tool") == "ask_user":
+            question = step.get("args", {}).get("question", "")
+            messages.append({"role": "assistant", "content": f"(asked) {question}"})
+            reply = step.get("reply")
+            messages.append(
+                {"role": "user", "content": f"(answered) {reply}" if reply else "(no answer)"}
+            )
+            continue
         if step.get("tool") != "run_command":
             continue
         command = step.get("args", {}).get("command", "")

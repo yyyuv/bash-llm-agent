@@ -4,6 +4,22 @@ Grows with each phase; the full ~15-case suite is the Phase 3 model
 comparison. Transcripts are auto-saved by the logger (~/.doit/logs/);
 curated copies for the report go in logs/.
 
+> ## ⚠ LIVE-RUN REMINDER — read before closing any phase gate
+>
+> **Offline unit suites (`tests/*_tests.py`) are necessary but NOT
+> sufficient.** They stub the model; they prove our controller/parser/
+> context logic, never that a real LLM behaves. **Every phase gate needs
+> 2–3 real model transcripts** saved under `logs/phaseN/`, run with a live
+> model (`set -a; source .env; set +a` for the API key). We are chronically
+> **under-tested on live runs — run more of them**, on more than one model
+> where feasible (gpt-4o-mini native + a local Ollama model), and capture
+> both the happy path and at least one failure/edge per phase.
+>
+> This file lists, per phase, the exact live cases to run. When you add a
+> phase, add its live cases here in the same turn you write the code —
+> retrofitted test docs are penalized (PLAN §2). Before saying a phase is
+> "done", ask: *"Have I run these live and saved the transcript?"*
+
 ## Phase 1 (single command)
 
 | # | invocation | expected behavior |
@@ -71,3 +87,58 @@ Ollama needed) — layer-1 (model) failing, layer-2 (our parser) recovering:
 llama3 wrapping JSON in prose, inventing tool names, dropping `is_destructive`,
 over-eager `ask_user` (once that tool exists) — grab at least one full failure
 transcript showing the retry recovering.
+
+## Phase 4 (multi-turn history) — LIVE
+
+Offline: `tests/history_tests.py` (replay shape, cold budget, K cap). **Live
+(required for the gate)** — same `DOIT_SESSION` across the chain so history
+carries; save the whole chain as ONE transcript. Reference:
+`logs/phase4/live_multiturn_gpt4omini.txt`.
+
+| # | invocation (same session) | expected behavior |
+|---|---|---|
+| 19 | `doit "list the files here"` | `ls -l` (or equiv) |
+| 20 | `doit "now sort them by date"` | command **changes** to `ls -lt` — NOT a re-run of #19, NOT the parroted `sort -k` (P4d) |
+| 21 | `doit "now in ascending order"` | flag **flips** to `ls -ltr` — genuine refinement, not a copy |
+| 22 | `doit "by creation time"` | honest `answer`: BSD `ls` has no creation-time sort, offers `-t` instead |
+
+Run on **≥2 models** (P4d showed gemma3:4b parrots the same command every
+turn — that failure transcript is prime model-comparison material; keep it).
+Watch for: follow-up parroting, session pollution when `DOIT_SESSION` is unset
+(everything lands in `"default"` — P4d #2), the K=10 cap.
+
+## Phase 5 (clarifications + richer interactions) — LIVE
+
+Offline: `tests/clarify_tests.py` (12/12). **Live (required for the gate)** —
+save transcripts to `logs/phase5/`.
+
+<!-- //TODO Phase 5 live capture (gate not closed until these are run + saved):
+     [x] case 23 decline path        -> logs/phase5/live_clarify_gpt4omini.txt
+     [ ] case 24 stacked-safety (Yes -> run_command -> y/N gate)  <- highest value
+     [ ] cases 25/26 no-answer default + Ctrl-C abort
+     [ ] cases 27/28 two-question cap + anti-annoyance (don't-ask)
+     [ ] cases 29-31 how-do-I -> modify it -> execute it chain
+     [ ] re-run 5a/5b on a 2nd (local Ollama) model for the comparison -->
+
+
+**5a — clarification (Section 6).** Force ambiguity so the model must ask:
+
+| # | invocation | expected behavior |
+|---|---|---|
+| 23 | `doit "delete the logs"`, answer `2`/`No` | `ask_user` menu → decline path → graceful `answer`, nothing runs (captured: live_clarify_gpt4omini) |
+| 24 | `doit "delete the logs"`, answer `1`/`Yes` | **both safety layers stack**: clarify → then `run_command` still hits the `⚠ Proceed? [y/N]` gate (strongest single transcript) |
+| 25 | `doit "delete the logs"`, press **Enter** (no answer) | D8 default path — "no answer, use default"; if the default is destructive the `y/N` gate still catches it |
+| 26 | `doit "delete the logs"`, **Ctrl-C** at the prompt | turn aborts cleanly ("Aborted."), recorded `aborted:true` (documented divergence from D8) |
+| 27 | a request needing 2 disambiguations | model asks sequentially (loop re-calls); confirm it stops at `MAX_CLARIFICATIONS=2` and then commits |
+| 28 | an UN-ambiguous request (e.g. `doit "list files by size"`) | does NOT ask — states the assumption in a parenthetical instead (anti-annoyance policy) |
+
+**5b — richer interactions (Section 7), same session:**
+
+| # | invocation (same session) | expected behavior |
+|---|---|---|
+| 29 | `doit "how do i find python files modified this week?"` | `answer` with the recipe, nothing runs |
+| 30 | `doit "modify it to also show file sizes"` | `answer` with the amended command (lifted from #29) |
+| 31 | `doit "execute it"` | `run_command` runs the command from its own prior answer (weak models fumble this — "execute what?"; keep that transcript) |
+
+Run 5a/5b on **≥2 models**; the weak local model over-asking (`ask_user` when
+it should assume) or failing #31 is exactly the model-comparison content.

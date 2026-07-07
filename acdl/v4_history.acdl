@@ -61,12 +61,22 @@ DoitAgentV4History[@T]: {
     A: sys.tool_call[@T.I]        // run_command(...) | answer(text)
 
     If sys.tool_call == run_command {
-        If sys.safety_check.is_sudo        { T: sys.blocked }        // hard refusal
-        ElseIf sys.safety_check.is_interactive { T: sys.blocked }    // vim/less/bare ssh...
-        ElseIf sys.safety_check.is_destructive {
-            If sys.confirmed { T: truncate(sys.tool_response) }      // HOT budget (current turn)
-            Else             { T: sys.blocked }                      // declined_by_user
+        If sys.safety_check.is_sudo {
+            T: sys.blocked                                  // hard refusal ("sudo"), no confirmation possible
         }
-        Else { T: truncate(sys.tool_response) }                      // read-only, runs immediately
+        ElseIf sys.safety_check.is_interactive {
+            T: sys.blocked                                  // vim/nano/top/less/bare ssh/python — would hang subprocess capture
+        }
+        ElseIf sys.safety_check.is_destructive {
+            If sys.confirmed {
+                T: truncate(sys.tool_response)              // executed; HOT budget (current turn)
+            }
+            Else {
+                T: sys.blocked                              // declined_by_user
+            }
+        }
+        Else {
+            T: truncate(sys.tool_response)                 // read-only, runs immediately
+        }
     }
 }

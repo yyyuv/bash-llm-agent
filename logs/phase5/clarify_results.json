@@ -1,0 +1,66 @@
+{
+  "passed": 12,
+  "total": 12,
+  "results": [
+    {
+      "case": "ask_user_in_schema",
+      "pass": true,
+      "detail": "required=['question']"
+    },
+    {
+      "case": "numbered_option_maps",
+      "pass": true,
+      "detail": "reply='beta'"
+    },
+    {
+      "case": "out_of_range_verbatim",
+      "pass": true,
+      "detail": "reply='9'"
+    },
+    {
+      "case": "free_text_returned",
+      "pass": true,
+      "detail": "reply='by size'"
+    },
+    {
+      "case": "eof_is_empty",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "reply_feeds_back",
+      "pass": true,
+      "detail": "obs='The user answered: yes, the src folder'"
+    },
+    {
+      "case": "empty_uses_default",
+      "pass": true,
+      "detail": "obs='The user gave no answer. Proceed with the most sensible default and state the assumption you made in your final answer.'"
+    },
+    {
+      "case": "cap_stops_asking",
+      "pass": true,
+      "detail": "prompted=0"
+    },
+    {
+      "case": "ctrl_c_aborts",
+      "pass": true,
+      "detail": "aborted='\\nAborted. (Nothing was executed.)'"
+    },
+    {
+      "case": "ask_then_run",
+      "pass": true,
+      "detail": "seq=['ask_user', 'run_command'] cmd='ls src'"
+    },
+    {
+      "case": "cap_limits_prompts",
+      "pass": true,
+      "detail": "prompted=2 (cap=2)"
+    },
+    {
+      "case": "ctrl_c_ends_turn",
+      "pass": true,
+      "detail": "final='\\nAborted. (Nothing was executed.)'"
+    }
+  ]
+}
