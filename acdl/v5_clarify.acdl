@@ -35,73 +35,45 @@
 //   ask_user replayed in history     <-> context._replay_turn (asked / answered lines)
 //   everything else                  <-> unchanged from v4
 
-DoitAgentV5Clarify[@T, I]: {
-    S: {
-        AGENT_INSTRUCTIONS        // role, command style, safety + chit-chat + WHEN-TO-ASK policy
-        AVAILABLE_TOOLS           // run_command(command, is_destructive, explanation),
-                                  // ask_user(question, options?), answer(text)
+DoitAgentV5Clarify[@T.I]: {
+  S: {
+    AGENT_INSTRUCTIONS        // role, command style, safety + chit-chat + WHEN-TO-ASK policy
+    AVAILABLE_TOOLS           // run_command(command, is_destructive, explanation),
+                              // ask_user(question, options?), answer(text)
+  }
+  U: {
+    ENV_INFO(env.cwd[@T], env.datetime[@T], env.shell[@T], env.os[@T])
+  }
+
+  // --- replay the last K turns of THIS session as chat (unchanged from v4) ---
+  ForEach(@t: range(1, @T-1)) {
+    U: env.history[@t].request
+    ForEach(@i: env.history[@t].steps) {
+      If env.history[@t].steps[@i].tool == ask_user {
+        A: env.history[@t].steps[@i].question       // "(asked) <question>"
+        U: env.history[@t].steps[@i].reply          // "(answered) <reply>" | "(no answer)"
+      }
+      ElseIf env.history[@t].steps[@i].ran {
+        A: env.history[@t].steps[@i].command        // "$ <command>"
+        U: truncate(env.history[@t].steps[@i].output)
+      }
+      Else {
+        A: env.history[@t].steps[@i].blocked        // "(did not run — <reason>): <command>"
+      }
     }
-    U: {
-        env.cwd
-        env.datetime
-        env.shell
-        env.os
+    If env.history[@t].final_answer {
+      A: env.history[@t].final_answer
     }
+  }
 
-    // --- replay the last K turns of THIS session as chat (unchanged from v4) ---
-    ForEach(@t: range(1, @T-1)) {
-        U: env.history[@t].request
-        ForEach(@i: env.history[@t].steps) {
-            If env.history[@t].steps[@i].tool == ask_user {
-                A: env.history[@t].steps[@i].question       // "(asked) <question>"
-                U: env.history[@t].steps[@i].reply          // "(answered) <reply>" | "(no answer)"
-            }
-            ElseIf env.history[@t].steps[@i].ran {
-                A: env.history[@t].steps[@i].command        // "$ <command>"
-                U: truncate(env.history[@t].steps[@i].output)   // COLD budget
-            }
-            Else {
-                A: env.history[@t].steps[@i].blocked        // "(did not run — <reason>): <command>"
-            }
-        }
-        If env.history[@t].final_answer {
-            A: env.history[@t].final_answer
-        }
+  ForEach(@i: range(1, I)) {                              // steps taken so far this turn
+    A: resp.tool_call[@T.i]                             // run_command | ask_user | answer
+
+    // Step Loop: Replaying the tool call interaction back into the conversation context
+    If resp.tool_call[@T.i] == ask_user {
+      T: resp.user_reply[@T.i]                           // Feed back the user answer to continue the loop
+    } ElseIf resp.tool_call[@T.i] == run_command {
+      T: truncate(resp.tool_response[@T.i])             // Execute command and capture output
     }
-
-    // --- the current turn: now a real multi-step loop over I ---
-    U: env.user_request[@T]
-    ForEach(@i: range(1, I)) {                              // steps taken so far this turn
-        A: sys.tool_call[@T.i]                             // run_command | ask_user | answer
-
-        If sys.tool_call[@T.i] == ask_user {
-            If sys.clarifications >= MAX_CLARIFICATIONS {
-                T: sys.clarification_capped                 // "limit reached — commit to best guess"
-            }
-            ElseIf sys.user_reply[@T.i] == empty {
-                T: sys.no_answer_default                    // "no answer — use your stated default"
-            }
-            Else {
-                T: sys.user_reply[@T.i]                     // "The user answered: <reply>"
-            }
-            // loop continues: re-call the LPU with the reply appended
-        }
-
-        ElseIf sys.tool_call[@T.i] == run_command {
-            If sys.safety_check.is_sudo        { T: sys.blocked }
-            ElseIf sys.safety_check.is_interactive { T: sys.blocked }
-            ElseIf sys.safety_check.is_destructive {
-                If sys.confirmed {
-                    T: truncate(sys.tool_response)             // HOT budget
-                }
-                Else {
-                    T: sys.blocked                            // declined / empty-on-destructive
-                }
-            }
-            Else { T: truncate(sys.tool_response) }                   // read-only, runs immediately
-            // single-command mode: command_steps == max_steps ends the turn
-        }
-
-        // answer ends the turn (the finish signal).
-    }
+  }
 }

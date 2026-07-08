@@ -1,0 +1,526 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{listings}
+\usepackage{tcolorbox}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows, positioning, fit, backgrounds}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{tabularx}
+
+% Professional Color Palette
+\definecolor{primary}{RGB}{30, 41, 59}    % Slate 800
+\definecolor{secondary}{RGB}{71, 85, 105}  % Slate 600
+\definecolor{accent}{RGB}{2, 132, 199}     % Sky 600
+\definecolor{background}{RGB}{248, 250, 252} % Slate 50
+\definecolor{border}{RGB}{226, 232, 240}     % Slate 200
+\definecolor{safetyred}{RGB}{239, 68, 68}    % Red 500
+\definecolor{confirmgreen}{RGB}{34, 197, 94} % Green 500
+
+% Section Formatting
+\titleformat{\section}{\Large\bfseries\color{primary}}{\thesection}{1em}{}[{\titlerule[0.5pt]}]
+\titleformat{\subsection}{\large\bfseries\color{secondary}}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\color{primary}}{\thesubsubsection}{1em}{}
+
+% Headers/Footers
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{secondary}Assignment 3: Agentic Shell (\texttt{doit})}
+\fancyhead[R]{\small\color{secondary}Yuval Reuveni \& Arbel Tepper}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% Hyperlink Configuration
+\hypersetup{
+    colorlinks=true,
+    linkcolor=accent,
+    citecolor=accent,
+    urlcolor=accent,
+    pdfauthor={Yuval Reuveni, Arbel Tepper},
+    pdftitle={Assignment 3: Agentic Shell (doit) - Report}
+}
+
+% Code Listing Configuration
+\lstset{
+    backgroundcolor=\color{background},
+    basicstyle=\ttfamily\small,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    commentstyle=\color{secondary}\itshape,
+    keywordstyle=\color{accent}\bfseries,
+    numberstyle=\tiny\color{secondary},
+    numbers=left,
+    numbersep=8pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    stringstyle=\color{teal},
+    frame=single,
+    rulecolor=\color{border},
+    tabsize=2,
+    escapeinside={(*@}{@*)}
+}
+
+% Custom TColorBox styles
+\newtcolorbox{decisionbox}[1]{
+    colback=background,
+    colframe=secondary,
+    coltitle=white,
+    fonttitle=\bfseries\color{white},
+    title=#1,
+    arc=4pt,
+    boxrule=1pt
+}
+
+\newtcolorbox{safetybox}[1]{
+    colback=background,
+    colframe=safetyred,
+    coltitle=white,
+    fonttitle=\bfseries\color{white},
+    title=#1,
+    arc=4pt,
+    boxrule=1.5pt
+}
+
+\begin{document}
+
+% TITLE PAGE
+\begin{titlepage}
+    \centering
+    \vspace*{2cm}
+    {\Huge\bfseries\color{primary} Assignment 3: Agentic Shell (\texttt{doit}) \par}
+    \vspace{0.5cm}
+    {\large\color{secondary} LLM-Class 2025-2026 \par}
+    \vspace{1.5cm}
+    
+    \begin{tikzpicture}[scale=0.8, every node/.style={transform shape}]
+        % System Architecture Diagram in Title
+        \node[draw, rectangle, fill=background, minimum width=3cm, minimum height=1.2cm, rounded corners] (user) at (0,0) {\bf User Request};
+        \node[draw, rectangle, fill=primary, text=white, minimum width=3.5cm, minimum height=1.5cm, rounded corners] (ctrl) at (4.5,0) {\bf Controller (Python)};
+        \node[draw, rectangle, fill=background, minimum width=3cm, minimum height=1.2cm, rounded corners] (lpu) at (9,0) {\bf LPU (LLM)};
+        
+        \draw[->, thick, >=stealth, color=primary] (user) -- (ctrl);
+        \draw[->, thick, >=stealth, color=primary] (ctrl.15) -- node[above] {\small Context} (lpu.165);
+        \draw[<-, thick, >=stealth, color=primary] (ctrl.345) -- node[below] {\small Structured Decision} (lpu.195);
+        
+        \node[draw, rectangle, fill=background, minimum width=3.5cm, minimum height=1.2cm, rounded corners] (shell) at (4.5,-2.5) {\bf Subprocess (Bash/Zsh)};
+        \draw[->, thick, >=stealth, color=primary] (ctrl.250) -- node[left] {\small Exec} (shell.110);
+        \draw[<-, thick, >=stealth, color=primary] (ctrl.290) -- node[right] {\small Output} (shell.70);
+    \end{tikzpicture}
+    
+    \vspace{2.5cm}
+    {\large\bfseries Authors: \par}
+    {\large Yuval Reuveni \& Arbel Tepper \par}
+    \vspace{1.5cm}
+    
+    \vfill
+    {\large\color{secondary} July 2026 \par}
+\end{titlepage}
+
+\newpage
+\tableofcontents
+\newpage
+
+% SECTION 1: INTRODUCTION & OVERVIEW
+\section{Introduction \& System Overview}
+\label{sec:intro}
+This report documents our design and implementation of the \texttt{doit} agentic shell, a command-line utility that translates natural language instructions into shell commands and executes them on behalf of the user. 
+
+Following the core architecture of LLM systems, we establish a strict boundary between the \textbf{Language Processing Unit (LPU)}—responsible solely for generating structured tool decisions from context—and the \textbf{Controller}—a deterministic Python runtime environment that manages state, enforces safety checks, and handles command execution.
+
+Rather than defining tools for specific commands (e.g., \texttt{ls} or \texttt{grep}), our agent uses a unified set of five universal tools: \texttt{run\_command}, \texttt{ask\_user}, \texttt{answer}, \texttt{remember}, and \texttt{change\_dir}. We structure this report to follow the exact sections defined in the assignment specifications, detailing the design decisions, implementation details, log evidence, and limitations encountered for each module.
+
+\subsection{Context Assembly and Code Mapping}
+\label{sec:context_mapping}
+Every block of context defined in our formal Agent Context Description Language (ACDL) schemas maps directly to a named Python function in the \texttt{doitlib/context.py} module:
+\begin{itemize}
+    \item \texttt{AGENT\_INSTRUCTIONS} $\longleftrightarrow$ \texttt{context.agent\_instructions()}
+    \item \texttt{env.cwd}, \dots $\longleftrightarrow$ \texttt{context.environment\_block()}
+    \item \texttt{env.history} $\longleftrightarrow$ \texttt{context.history\_messages()}
+\end{itemize}
+This precise mapping guarantees that the formal specifications reflect the actual runtime context injected into the LPU during each turn loop execution. Figure~\ref{fig:context_map} represents this context assembly process.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}[
+        node distance=0.8cm and 1.5cm,
+        block/.style={draw=primary, fill=background, rectangle, minimum width=6.5cm, align=left, font=\small, thick},
+        container/.style={draw=accent, dashed, rectangle, inner sep=10pt, thick}
+    ]
+        % System block
+        \node[block] (system) {
+            \textbf{System Instructions (S:)} \\
+            - \texttt{context.agent\_instructions()} \\
+            - Tool schemas (Native / Prompted text)
+        };
+        
+        % Environment block
+        \node[block, below=of system] (env) {
+            \textbf{Environment Block (U:)} \\
+            - CWD, active shell type, OS version \\
+            - Current date and time
+        };
+
+        % History block
+        \node[block, below=of env] (hist) {
+            \textbf{Replayed History turns (Last K=10) (U: / A:)} \\
+            - Past user requests and tool executions \\
+            - Cold-truncated outputs (Tiered Budgets)
+        };
+
+        % Current input
+        \node[block, below=of hist, fill=accent!10, draw=accent] (curr) {
+            \textbf{Current Request (U:)} \\
+            - \texttt{doit "now sort them by date"}
+        };
+        
+        % Fit container
+        \begin{scope}[on background layer]
+            \node[container, fit=(system) (env) (hist) (curr)] (ctx) {};
+            \node[above=0.1cm of ctx, font=\bfseries\color{accent}] {ACDL Prompt Context Assembly};
+        \end{scope}
+    \end{tikzpicture}
+    \caption{LPU input context block mapping.}
+    \label{fig:context_map}
+\end{figure}
+
+\newpage
+
+% SECTION 2: SINGLE COMMAND AT A TIME
+\section{Single command at a time.}
+\label{sec:single_command}
+The core requirement of this section is translating a single natural language request into a shell command, printing it, executing it in the user's active shell, and displaying the output.
+
+\subsection{Implementation Details}
+We developed the entry-point executable \texttt{doit} in Python (placed on the user's \texttt{PATH} via \texttt{\textasciitilde/.local/bin}). The system operates by assembling a system prompt, appending an environment block detailing the user's shell parameters, and calling the LPU with a command-step cap of \texttt{max\_steps=1}. 
+
+If the user's prompt represents a command, the LPU calls the \texttt{run\_command} tool, which is intercepted and executed via Python's \texttt{subprocess.run}. If the prompt represents a general inquiry, the LPU responds with the \texttt{answer} tool.
+
+\subsection{Design Decisions}
+
+\begin{decisionbox}{Design Decision: Shell-Function Wrapper for Directory Navigation (\texttt{cd})}
+    \textbf{Problem:} When a user runs a Python script, it runs in a child subprocess. Any directory change (\texttt{cd}) executed by the script is lost when the script exits, returning the user to the original terminal directory.
+    
+    \textbf{Solution:} We resolved this by writing a dual-shell wrapper. The \texttt{change\_dir} tool verifies that the path exists and writes it to a temporary file: \texttt{\textasciitilde/.doit/cd\_target\_\$DOIT\_SESSION}. Upon \texttt{doit}'s termination, a shell function wrapper intercepts the exit, checks for the presence of this file, runs the native \texttt{cd} command inside the parent shell, and deletes the file.
+    
+    \textbf{Dual-Shell Snippet (Zsh / Bash):}
+    \begin{lstlisting}[language=bash]
+doit() {
+  command doit "$@"
+  local target=~/.doit/cd_target_$DOIT_SESSION
+  [ -f "$target" ] && cd "$(cat "$target")" && rm "$target"
+}
+    \end{lstlisting}
+\end{decisionbox}
+
+\begin{decisionbox}{Design Decision: Dual-Shell Variable Normalization}
+    \textbf{Context:} Since different team members use different operating systems and shells (e.g., macOS/Zsh vs. Linux/Bash), command arguments and behavior can diverge.
+    
+    \textbf{Solution:} We normalize shell interactions at the boundary. The Controller auto-detects the host shell via \texttt{\$SHELL} and includes the shell type and operating system (BSD vs. GNU) in the environment prompt block. The system prompt instructs the LPU to emit shell-agnostic commands or syntax tailored to the host environment.
+\end{decisionbox}
+
+\begin{decisionbox}{Design Decision: Primary API Model Selection}
+    \textbf{Choice:} We selected \texttt{openai/gpt-4o-mini} as our primary API model. It is inexpensive, runs with low latency, and features robust native tool-calling capabilities that simplify core development.
+\end{decisionbox}
+
+\subsection{Example Interactions}
+Below are two successful single-command interactions run using our primary model:
+
+\begin{lstlisting}[language=bash, caption={Listing files including hidden ones.}]
+$ doit "show me all files here, including hidden ones"
+$ ls -la
+total 232
+drwxr-xr-x@  6 yuval  staff    192 Jul  7 18:23 acdl
+-rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 CLAUDE.md
+-rw-r--r--@  1 yuval  staff  30675 Jul  7 18:57 DECISIONS.md
+-rwxr-xr-x@  1 yuval  staff   1319 Jul  7 15:00 doit
+\end{lstlisting}
+
+\begin{lstlisting}[language=bash, caption={Disk space command execution.}]
+$ doit "how much disk space is left?"
+$ df -h
+Filesystem     Size   Used  Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1   926Gi   17Gi  702Gi     3%    459k  4.3G    0%   /
+\end{lstlisting}
+
+% SECTION 3: IDENTIFYING DANGEROUS COMMANDS
+\section{Identifying dangerous commands}
+\label{sec:safety}
+To prevent the agent from accidentally corrupting the host machine or executing destructive actions without oversight, we implement safety policies that intercept filesystem mutations.
+
+\subsection{Implementation Details}
+Safety is handled through a double-layer verification policy (defense in depth):
+\begin{enumerate}
+    \item \textbf{LPU Self-Report (Layer 1):} The \texttt{run\_command} tool schema requires the LPU to populate the \texttt{is\_destructive} boolean flag and provide an \texttt{explanation} of what the command will do.
+    \item \textbf{Deterministic Guard (Layer 2):} The Controller intercepts the decision and passes the command through a pre-compiled regex guard in \texttt{safety.py}. If the regex matches mutating operations (e.g. \texttt{rm}, \texttt{mv}, \texttt{cp}, \texttt{mkdir}, redirects \texttt{>}, \texttt{>>}, \texttt{git reset}), it overrides a false ``safe'' report, forcing \texttt{is\_destructive=True}.
+\end{enumerate}
+
+\subsection{Design Decisions}
+
+\begin{decisionbox}{Design Decision: In-Band Self-Report vs. Separate LLM Judge Call}
+    \textbf{Alternative Rejected:} We rejected using a separate LLM call to classify command destructiveness (as suggested in the assignment description). 
+    
+    \textbf{Rationale:} A second LLM call doubles latency and API costs. Because the regex guard is required to handle safety deterministically anyway, we require the LPU to report destructiveness in the same JSON object as the command itself. The regex guard acts as the fallback mechanism. If the guard overrides the model's safety flag, the event is logged for analysis.
+\end{decisionbox}
+
+\begin{safetybox}{Safety Refusals vs. Confirmation Gates}
+    \textbf{Hard Refusals:} Any command containing \texttt{sudo} or starting with an interactive full-screen program (e.g., \texttt{vim}, \texttt{nano}, \texttt{less}, \texttt{top}) is blocked immediately in the Controller. No confirmation is offered.
+    
+    \textbf{Confirmation Gates:} When a command is flagged destructive (either by the model or the regex override), the Controller halts, displays the command and its explanation, and prompts the user with \texttt{Proceed? [y/N]}. Execution only proceeds if the user inputs \texttt{y} or \texttt{yes}.
+\end{safetybox}
+
+\subsection{Example Interactions}
+
+\begin{lstlisting}[language=bash, caption={Handling a destructive command with user confirmation.}]
+$ doit "delete junk.txt"
+[WARNING] This command modifies the filesystem:
+    rm junk.txt
+  This command deletes the file junk.txt.
+Proceed? [y/N] y
+$ rm junk.txt
+\end{lstlisting}
+
+\begin{lstlisting}[language=bash, caption={Interactive program refusal.}]
+$ doit "open vim to write a story"
+doit: 'vim' opens an interactive program doit can't wait for. Run it yourself:
+    vim
+\end{lstlisting}
+
+\subsection{ACDL Context Specification: DoitAgentV2}
+The formal context structure representing the safety gate integration is detailed in the visual ACDL diagram below:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{acdl_v2.png}
+    \caption{Visual representation of the ACDL context for DoitAgentV2 (Safety Gate).}
+    \label{fig:acdl_v2}
+\end{figure}
+
+\subsection{Limitations \& Imperfect Behavior}
+\begin{itemize}
+    \item \textbf{Interactive SSH False Negatives:} In \texttt{safety.py}, we identify interactive SSH sessions by checking if the command contains more than one non-flag token. A command such as \texttt{ssh -p 2222 host} is parsed as having multiple arguments and passes as non-interactive, hanging the subprocess execution when it drops into a terminal.
+    \item \textbf{Regex False Positives:} Commands such as \texttt{grep "rm -rf" notes.txt} contain write patterns inside text patterns. The regex guard overrides this as destructive, forcing a redundant \texttt{y/N} confirmation on a read-only command.
+\end{itemize}
+
+% SECTION 4: MODEL FLEXIBILITY
+\section{Model flexibility}
+\label{sec:model_flexibility}
+To ensure the utility can run independently of commercial API keys, we extended the system to run local models locally.
+
+\subsection{Implementation Details}
+We introduced a configuration file \texttt{\textasciitilde/doit.cfg} to declare the active model and its adapter. We implement two code adapters behind a unified interface:
+
+\begin{decisionbox}{Design Decision: Native vs. Prompted Adapter Architectures}
+    \textbf{Native Adapter (\texttt{\_call\_native}):} For models supporting LiteLLM's JSON tool-calling protocol (e.g., \texttt{gpt-4o-mini}, \texttt{qwen3:4b-instruct}). LiteLLM passes tool schemas out-of-band and receives structured tool outputs.
+    
+    \textbf{Prompted Adapter (\texttt{\_call\_prompted}):} For local models that do not natively support tool-calling (e.g., \texttt{gemma3:4b}). It renders tool schemas as text, appends them to the system prompt, and enforces a strict JSON wrapper. To handle parser failures, we implement a string-based balanced brace scanner to locate JSON blocks, and allow \textbf{one retry} by appending the syntax error back to the LPU.
+\end{decisionbox}
+
+\subsection{Evaluation of Local Models}
+We evaluated three models using the test suite in \texttt{tests/cases.md}:
+\begin{table}[htbp]
+    \centering
+    \caption{Model capabilities and adapters.}
+    \begin{tabularx}{\textwidth}{lllX}
+        \toprule
+        \textbf{Model Name} & \textbf{Deployment} & \textbf{Adapter} & \textbf{Tool-Calling Capability} \\
+        \midrule
+        \texttt{openai/gpt-4o-mini} & API (Remote) & Native & Full structured tool support \\
+        \texttt{ollama/qwen3:4b-instruct} & Local (Ollama) & Native & Local tool-calling support \\
+        \texttt{ollama/gemma3:4b} & Local (Ollama) & Prompted & None; relies on text JSON prompts \\
+        \bottomrule
+    \end{tabularx}
+    \label{tab:models_eval}
+\end{table}
+
+\subsection{Analysis of Divergences and Failure Modes}
+
+\subsubsection{Gemma-3 Impossible Request Failure}
+When asked to perform a physically impossible command like \texttt{"make my laptop fly"}, the native models correctly responded with the conversational \texttt{answer} tool. However, the local \texttt{gemma3:4b} model (running under the prompted adapter) attempted to execute it via bash, choosing the \texttt{run\_command} tool with:
+\begin{lstlisting}[language=bash]
+echo "Sorry, I cannot make your laptop fly.""
+\end{lstlisting}
+Because the model appended a trailing double quote, the command crashed with a shell parse error: \texttt{zsh:1: unmatched "}.
+
+\subsubsection{Prompted Adapter Recovery Logs}
+Under the prompted adapter, local models often return markdown fences and conversational preambles. Below is a log showing our parser successfully stripping the preamble and recovering the JSON payload:
+\begin{lstlisting}[caption={JSON de-fencing and brace-scanning recovery.}]
+Raw LPU Output:
+Sure, here is the command to view disk space:
+```json
+{
+  "tool": "run_command",
+  "args": {
+    "command": "df -h",
+    "is_destructive": false,
+    "explanation": "Check available disk space."
+  }
+}
+```
+Parser Action: Strip fences, run brace scan -> extracted {"tool": "run_command", ...}
+\end{lstlisting}
+
+\subsection{ACDL Context Specification: DoitAgentV3Prompted}
+For models without native tool-calling, tool schemas move into the system prompt prose, and the raw text reply is parsed. The visual ACDL diagram below shows how we handle JSON validation and retries:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{acdl_v3.png}
+    \caption{Visual representation of the ACDL context for DoitAgentV3Prompted (Prompted Adapter).}
+    \label{fig:acdl_v3}
+\end{figure}
+
+% SECTION 5: MULTI-TURN
+\section{Multi-turn}
+\label{sec:multi_turn}
+To move from isolated commands to conversational sequences, we carry state across invocations, allowing commands to refer to previous outputs.
+
+\subsection{Implementation Details}
+When \texttt{doit} runs, it loads the session ID from the environment variable \texttt{DOIT\_SESSION} (which defaults to \texttt{"default"} if unset). The Controller reads and parses the JSONL session logs located at \texttt{\textasciitilde/.doit/sessions/\$DOIT\_SESSION.jsonl}, extracts the last $K=10$ turns, and splices them back into the prompt context.
+
+\subsection{Design Decisions}
+
+\begin{decisionbox}{Design Decision: JSONL Storage Format}
+    \textbf{Problem:} Selecting an appropriate storage format for history.
+    
+    \textbf{Choice:} We chose JSONL (JSON Lines) files over SQLite. JSONL is lightweight, human-readable, and allows O(1) appends. It facilitates debugging and log evidence curation for the report.
+\end{decisionbox}
+
+\begin{decisionbox}{Design Decision: Tiered Truncation Budgets (\texttt{HOT} vs. \texttt{COLD})}
+    \textbf{Problem:} Feeding complete command outputs (e.g. file listings or compiler logs) back into the prompt quickly overflows the context window.
+    
+    \textbf{Solution:} We implement a tiered head/tail truncation strategy. The active turn's output is allocated a \textbf{Hot Budget} (up to 3,000 characters head, 1,000 characters tail) to support follow-up decisions. Older replayed history turns are truncated to a \textbf{Cold Budget} (1,000 characters head, 300 characters tail), which provides enough context to resolve follow-ups (like referring to listed files) while saving tokens.
+\end{decisionbox}
+
+\subsection{Example Multi-Turn Interactions}
+Below is a live multi-turn session log using \texttt{gpt-4o-mini}, demonstrating how the model changes flags and behavior rather than parroting commands:
+
+\begin{lstlisting}[language=bash, caption={Relational multi-turn listing and sorting.}]
+$ DOIT_SESSION=demo doit "list the files here"
+$ ls -l
+total 232
+-rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 CLAUDE.md
+-rw-r--r--@  1 yuval  staff  30675 Jul  7 18:57 DECISIONS.md
+
+$ DOIT_SESSION=demo doit "now sort them by date"
+$ ls -lt
+total 232
+-rw-r--r--@  1 yuval  staff  30675 Jul  7 18:57 DECISIONS.md
+-rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 CLAUDE.md
+
+$ DOIT_SESSION=demo doit "now in ascending order"
+$ ls -ltr
+total 232
+-rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 CLAUDE.md
+-rw-r--r--@  1 yuval  staff  30675 Jul  7 18:57 DECISIONS.md
+\end{lstlisting}
+
+\subsection{Limitations \& Divergences}
+Under local instruction models (such as \texttt{gemma3:4b}), we observed a failure where the model parroted the same command (\texttt{ls -la | sort -k 5 -r}) across multiple turns instead of adjusting the sort arguments. This indicates that small local models struggle with context tracking and copy previous outputs rather than adjusting parameters.
+
+% SECTION 6: CLARIFICATIONS
+\section{Clarifications}
+\label{sec:clarifications}
+When a user request is ambiguous, the agent must ask clarifying questions rather than guessing or executing a potentially harmful action.
+
+\subsection{Implementation Details}
+We introduce the \texttt{ask\_user} tool. When invoked by the LPU, the Controller prints the question alongside a numbered options menu, blocks on user input, and feeds the response back to the LPU. This process runs as a within-turn loop and does not count towards the command-step count.
+
+\subsection{Design Decisions}
+
+\begin{decisionbox}{Design Decision: Unanswered Clarification Default Behavior}
+    \textbf{Problem:} How to proceed if the user presses Enter (empty input) or interrupts the prompt.
+    
+    \textbf{Solution:} Pressing Enter returns \texttt{"no answer"} to the LPU, instructing it to proceed with the default option it stated. If this default results in a destructive command, the Layer 2 safety confirmation gate (\texttt{Proceed? [y/N]}) still blocks execution. Pressing Ctrl-C raises a KeyboardInterrupt, aborts the turn immediately, and logs the abort status.
+\end{decisionbox}
+
+\subsection{Non-Annoyance Cap}
+To prevent the agent from asking questions repeatedly, we implement two controls:
+\begin{enumerate}
+    \item \textbf{System Prompt Policy:} The LPU is instructed to ask questions only when a wrong guess is destructive, or when interpretations lead to different results with no clear default. Otherwise, it must assume the most common interpretation and state it in the final output.
+    \item \textbf{Structural Cap:} We enforce a hard limit of \texttt{MAX\_CLARIFICATIONS=2} in the Controller. If the LPU exceeds this, the Controller feeds a capped message warning the model to commit to its best guess.
+\end{enumerate}
+
+\subsection{Example Interaction}
+\begin{lstlisting}[language=bash, caption={Clarification question menu and user choice.}]
+$ DOIT_SESSION=demo doit "delete the logs"
+Are you sure you want to delete the logs? This action cannot be undone.
+  1. Yes
+  2. No
+Your answer (number or text): 2
+The logs will not be deleted as per your request.
+\end{lstlisting}
+
+\subsection{ACDL Context Specification: DoitAgentV5Clarify}
+The final formal context structure for our agent, representing both replayed turns and the within-turn clarification loop, is detailed in the visual ACDL diagram below:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{acdl_v5.png}
+    \caption{Visual representation of the ACDL context for DoitAgentV5Clarify (Clarifications \& Multi-turn).}
+    \label{fig:acdl_v5}
+\end{figure}
+
+% SECTION 7: RICHER INTERACTIONS
+\section{Richer interactions}
+\label{sec:richer_interactions}
+Richer interactions require the agent to respond to non-commands (e.g., ``how do I do X?'') and handle follow-up refinement chains (e.g., ``how do I list files?'' $\rightarrow$ ``modify it to show sizes'' $\rightarrow$ ``execute it'').
+
+\subsection{Implementation Details}
+We resolved this without introducing new tools or classification models. 
+\begin{itemize}
+    \item \textbf{Explaining vs. Running:} If a user asks a question, the LPU uses the \texttt{answer} tool. The Controller displays the answer and terminates the turn loop without executing commands.
+    \item \textbf{Execution from History:} When the user subsequently requests ``execute it'', the request is sent with the session's turn history. The LPU reads the command structure it described in the previous \texttt{answer} and passes it to the \texttt{run\_command} tool.
+\end{itemize}
+
+\subsection{Example Interaction}
+Below is a three-turn interaction chain showing history extraction and execution:
+\begin{lstlisting}[language=bash, caption={How-do-I question, command modification, and execution.}]
+$ doit "how do I find python files modified this week?"
+You can use: find . -name "*.py" -mtime -7
+$ doit "modify it to also show file sizes"
+You can use: find . -name "*.py" -mtime -7 -ls
+$ doit "execute it"
+$ find . -name "*.py" -mtime -7 -ls
+  14283    8 -rw-r--r--   1 yuval  staff  1319 Jul  7 15:00 ./doit
+\end{lstlisting}
+
+\subsection{Limitations}
+We observed that smaller local models (such as \texttt{gemma3:4b}) frequently fail on the third turn (``execute it''), responding with ``Execute what?'' or hallucinating unrelated commands. This indicates that tracking command references across multiple conversational turns is a capability limited to larger, instruction-tuned models.
+
+% SECTION 8: ENVIRONMENT FRICTION LOG
+\section{System Environment \& Friction Log}
+\label{sec:friction_log}
+Developing an agent that executes commands directly in a system shell exposes several environment-specific failure modes. We cataloged these incidents below:
+
+\begin{enumerate}
+    \item \textbf{Conda vs. System Python Conflicts:} The host machine had active Conda and system Python installations. Sourcing the Conda environment put Conda's Python interpreter first on the \texttt{PATH}, which did not have \texttt{litellm} installed. This caused a \texttt{ModuleNotFoundError} when calling \texttt{doit}. Sourcing \texttt{conda deactivate} resolved the conflict.
+    
+    \item \textbf{Shell Sourcing vs. Exporting:} Sourcing the \texttt{.env} file using \texttt{source .env} defined \texttt{OPENAI\_API\_KEY} as a local shell variable, but parent processes could not read it. Sourcing must explicitly export variables:
+    \begin{lstlisting}[language=bash]
+    set -a; source .env; set +a
+    \end{lstlisting}
+    
+    \item \textbf{PATH Corruption:} A manual edit in \texttt{\textasciitilde/.zshrc} corrupted the \texttt{PATH} syntax, resulting in a \texttt{zsh: command not found: doit} error. The PATH variable was restored to its clean declaration: \texttt{export PATH="\$HOME/.local/bin:\$PATH"}.
+\end{enumerate}
+
+% SECTION 9: CONCLUSION
+\section{Conclusion \& Limitations Summary}
+We successfully built the \texttt{doit} agentic shell in accordance with a clean Controller-LPU separation. The agent supports safety gates, native/prompted adapters, multi-turn history with tiered budgets, and within-turn clarification loops. 
+
+Our main open limitation is safety regex false positives (e.g. flagging \texttt{grep "rm -rf"} as destructive) and parsing interactive options (e.g. \texttt{ssh -p 2222}) where the regex check does not capture interactive states. However, the system is secure and successfully delegates complex execution logic to local and remote language models.
+
+\end{document}
