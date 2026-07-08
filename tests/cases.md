@@ -179,3 +179,22 @@ between steps to show state.
 Run on **≥2 models**; watch for the weak local model over-remembering
 (storing transient junk), failing to lift the id for `forget` when editing
 (case 35), or forgetting to remember *before* the command (case 37).
+
+## Phase 6.5 (change_dir, D1 cd-trap fix) — LIVE
+
+Offline: `tests/change_dir_tests.py` (10/10 — path resolution/validation,
+cd_target file writer, `_handle_change_dir`, run_turn integration for
+change_dir→answer and change_dir→run_command). **Live** — captured in
+`logs/phase6_5/live_change_dir.txt`, using the real `shell/zshrc_snippet.sh`
+sourced in an isolated `zsh -c` subshell (not the full `~/.zshrc`, to avoid
+entangling with unrelated config) before trusting it in the real shell.
+
+| # | invocation | expected behavior | result |
+|---|---|---|---|
+| 39 | `doit "go to the logs directory"` | `change_dir` writes the cd_target file; the parent shell's real `pwd` changes after `doit` exits | PASS |
+| 40 | `doit "go to a folder called definitely_does_not_exist_xyz"` | rejected with a clear error; no cd_target file written, pwd unchanged | PASS |
+| 41 | `doit "go to the logs directory and list files in it"` | `change_dir` then `run_command`, one turn; the command must target the resolved path explicitly since the real cd hasn't happened yet | PASS on 2nd attempt — see DECISIONS.md P6.5b (prompt-paragraph fix failed; moving the warning into the tool result itself fixed it) |
+| 42 | in a REAL terminal (not sandboxed): `type doit` before/after `source ~/.zshrc`, then `doit "go to logs/ folder"` | wrapper only active after sourcing; once active, the zsh PROMPT ITSELF changes (`bash-llm-agent %` → `logs %`) — strongest possible confirmation | PASS — logs/phase6_5/p6_5.jsonl |
+| 43 | same request as #42, plain "go to X" with no listing asked for | should NOT run an unrequested follow-up command | FAILED first (model added a self-initiated `ls` hitting the old-cwd trap, P6.5b's fix didn't stop it since nothing told the model not to add it); FIXED by strengthening both the tool schema and the tool-result text (DECISIONS.md P6.5d); retested PASS on both the plain request (no `ls`) and the explicit "...and list it" request (still lists correctly) |
+
+Also verified: the real `~/.zshrc` was backed up (`~/.zshrc.doit-backup-<timestamp>`) before the snippet was appended, wrapped in `# >>> doit integration >>>` markers.

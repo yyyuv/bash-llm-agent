@@ -26,6 +26,13 @@ shared memory store, feeds the result back, and the loop continues — so
 the model can store a fact AND run a command (or answer) in one turn (the
 "move here, and this is my project folder" case). Editing a fact is a
 forget followed by a remember across two steps.
+
+Adds `change_dir` (D1's cd-trap fix, implemented as a prerequisite ahead
+of Phase 7). A subprocess cannot change its parent shell's cwd, so this is
+also a within-turn step: it validates the target and writes it to
+~/.doit/cd_target_$DOIT_SESSION, then continues the loop — the doit()
+shell wrapper (shell/*_snippet.sh) performs the real cd after this process
+exits. Composes with the other tools (e.g. "go there and remember it").
 """
 
 import os
@@ -78,6 +85,11 @@ def run_turn(request: str, config: Config) -> None:
 
         if decision.tool_name in ("remember", "forget"):
             observation = _handle_memory(decision.tool_name, decision.args, steps)
+            _append_tool_result(messages, decision, observation)
+            continue
+
+        if decision.tool_name == "change_dir":
+            observation = _handle_change_dir(decision.args, session_id, steps)
             _append_tool_result(messages, decision, observation)
             continue
 
@@ -232,6 +244,36 @@ def _handle_memory(tool_name: str, args: dict, steps: list) -> str:
     if removed:
         return f"Forgot memory {memory_id}."
     return f"There is no memory with id {memory_id} to forget."
+
+
+def _handle_change_dir(args: dict, session_id: str, steps: list) -> str:
+    """Validate a change_dir target and hand it off to the shell wrapper.
+
+    A within-turn step, like remember/forget: it does not consume a
+    command step, so the model can cd AND run a command or remember
+    something in the same turn. Nothing here touches this process's own
+    cwd — the doit() shell function reads the written file and performs
+    the real cd after this process exits (D1's cd-trap fix).
+    """
+    path = args.get("path", "")
+    result = tools.resolve_change_dir(path)
+    if result.error:
+        print(f"· {result.error}", file=sys.stderr)
+        steps.append({"tool": "change_dir", "args": args, "error": result.error})
+        return result.error
+
+    state.write_cd_target(session_id, result.resolved_path)
+    print(f"· will cd to {result.resolved_path} after this run", file=sys.stderr)
+    steps.append({"tool": "change_dir", "args": args, "resolved_path": result.resolved_path})
+    return (
+        f"Directory will change to {result.resolved_path} once doit exits — "
+        f"NOT yet. Do NOT run a follow-up command (e.g. ls) unless the "
+        f"user's request explicitly asked to see/list what's there — if the "
+        f"request was only to go to this directory, call answer now to "
+        f"confirm and stop. If a follow-up command IS warranted, target "
+        f"{result.resolved_path} explicitly (e.g. `ls {result.resolved_path}`), "
+        f"do not run a bare command assuming you're already there."
+    )
 
 
 def _prompt_user(question: str, options: list) -> str:

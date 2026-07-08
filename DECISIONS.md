@@ -244,3 +244,45 @@ Considered (A) trim the replayed message to the one call we answer, vs (B) make 
 
 ### Phase 6 gate: CLOSED
 All live cases captured (logs/phase6/): 32/33 remember+recall, 35 crash-free edit (good_interaction_memo.txt), 36 cross-session recall, 37 dual-trigger, 38 anti-clutter (live_remaining_cases.txt), plus the retarget-with-2-memories bonus check — the pre-fix wrong-forget-target behavior did not reproduce once P6e's crash fix was in place. Case 34 partially captured; surfaced that `change_dir` doesn't exist yet, so "go to X" runs `cd` inside the subprocess with no effect on the parent shell — expected, not a Phase 6 defect, flagged for whichever phase builds `change_dir`. Offline suite 14/14.
+
+## Phase 6.5 — change_dir (D1 cd-trap fix, inserted as a blocker ahead of Phase 7) — 2026-07-08
+
+### Scope: implemented D1 now, not folded into Phase 7 itself
+Yuval asked to implement `change_dir` + the shell cd-wrapper now, as an explicit blocker before Phase 7 (user shell-history awareness), rather than bundling it into Phase 7's scope. D1 was locked since the planning phase but never scheduled into any of Phases 0–6; case 34 (Phase 6 live testing) surfaced the gap concretely. Kept the shell_hist/PROMPT_COMMAND hook (the actual Phase 7 content) OUT of this work — only the `doit()` wrapper + `DOIT_SESSION` auto-generation were added to the shell snippets, since those are what `change_dir` needs to have any real effect.
+
+### Evidence: why `cd` via `run_command` cannot work — requires a different mechanism, not a better command
+Two real excerpts from `logs/phase6/good_interaction_memo.txt` (pre-change_dir, `doit "go to my favourite folder"`), showing this is a structural limit of `run_command`, not a fixable prompt/command issue:
+
+Case A — relative-looking path, subprocess has no such directory:
+```
+$ cd /logs
+zsh:cd:1: no such file or directory: /logs
+doit: command exited with code 1
+```
+
+Case B — absolute path, `cd` succeeds with NO error inside the subprocess, yet the real prompt is unchanged immediately after:
+```
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "go to my favourite folder"
+$ cd /Users/yuvalreuveni/Documents/Claude/Projects/assingment3/bash-llm-agent/logs
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent %
+```
+The prompt still reads `bash-llm-agent %`, not `logs %` — the `cd` genuinely ran and succeeded, but only inside the disposable `subprocess.run` process `run_command` spawns; that process exits and its cwd goes with it. No amount of prompt tuning or a "correct" command fixes this — a `run_command`-only `cd` can never change the caller's shell, successful or not, which is exactly why `change_dir` had to be a distinct tool with a distinct mechanism (a handoff file + a shell-side wrapper function that runs `cd` in the ONE process that matters — the user's actual shell), not just better instructions to use `cd` correctly.
+
+### P6.5a — change_dir is a within-turn step, like remember/forget/ask_user
+Chosen: `controller._handle_change_dir` validates the path (`tools.resolve_change_dir` — expands `~`, resolves relative to cwd, checks `os.path.isdir`), writes `~/.doit/cd_target_$DOIT_SESSION` (`state.write_cd_target`) on success, and re-enters the loop rather than ending the turn — so `change_dir` composes with `run_command`/`remember` in the same turn ("go there and remember it"). An invalid path writes nothing and returns the error as the tool result instead, so the model can retry or explain rather than the shell wrapper silently failing on a bad `cd` later.
+
+### P6.5b — bug: same-turn run_command executed in the OLD cwd; a separate prompt paragraph didn't fix it, moving the warning into the tool result did
+Observed live: `doit "go to the logs directory and list files in it"` correctly wrote the cd_target file, but the following `run_command` ran a bare `ls` — which executes in THIS process's cwd, unchanged, since the real `cd` only happens after the whole process exits via the shell wrapper. The listing shown was the wrong (old) directory's contents even though the tool result already stated the resolved absolute path.
+Attempt 1 (failed): added a system-prompt paragraph explaining the same-turn timing gap. Retested live: model still ran a bare `ls`.
+Attempt 2 (fixed): moved the warning into `_handle_change_dir`'s own returned observation text ("... NOT yet. If you also run a command in `<path>` this turn, target that path explicitly..."), right where the model reads the change_dir result before choosing its next tool call. Retested live: `run_command` now targets the resolved path explicitly and lists the correct directory.
+Same lesson as P5e: an exception must sit at the exact point of decision (the tool result, right before the next choice), not in a separate, more general paragraph elsewhere in the prompt.
+
+### P6.5c — shell config: backed up before editing, snippet marked with a delimiter block
+Chosen: backed up `~/.zshrc` to `~/.zshrc.doit-backup-<timestamp>` before appending anything (per Yuval's explicit go-ahead, and given the P2e incident where a hand-edited PATH line broke `doit` resolution). The appended block is wrapped in `# >>> doit integration >>>` / `# <<< doit integration <<<` markers (same convention already used for the commented-out conda block noted in P2f), so it's easy to find or remove later. `shell/zshrc_snippet.sh` and `shell/bashrc_snippet.sh` (identical content — the `doit()` wrapper has no bash/zsh-specific syntax) live in the repo per D3's dual-shell requirement; only `~/.zshrc` was actually live-edited since that's Yuval's shell.
+Verified: the wrapper was tested standalone (sourced in isolation via `zsh -c`, not the full `~/.zshrc`, to avoid entangling with unrelated zshrc content) before trusting it in the real config — a real shell's `pwd` changed after `doit` exited, confirming the D1 mechanism works end to end for the first time this project. `logs/phase6_5/live_change_dir.txt`; offline suite `tests/change_dir_tests.py` 10/10. Full regression (memory/clarify/history/prompted_adapter) still green.
+Confirmed a second time in Yuval's ACTUAL terminal (not a sandboxed test): a pre-existing terminal session had `doit` resolving to the raw binary (`type doit` → `/Users/yuvalreuveni/.local/bin/doit`) since it predated the `~/.zshrc` edit. After `source ~/.zshrc`, `type doit` correctly showed "a shell function", and running `doit "go to logs/ folder"` changed the visible zsh prompt itself from `bash-llm-agent %` to `logs %` — the strongest possible confirmation, since the prompt is generated by the live shell, not by doit.
+
+### P6.5d — bug: model added an unrequested `ls` after change_dir, hitting the old-cwd trap even without being asked to list anything
+Observed live TWICE in Yuval's real terminal (`logs/phase6_5/p6_5.jsonl`): `doit "go to logs/ folder"` — a plain cd request with no mention of listing — still produced `change_dir` followed by an unrequested `run_command("ls")`. Because that `ls` ran before the real cd took effect (P6.5b), it printed the OLD directory's contents, not `logs/`'s. This is a broader trigger than P6.5b's original repro (an explicit "go there and list it"): here the model volunteered the follow-up entirely on its own, so P6.5b's fix (which only tells the model how to target the path IF it runs a follow-up) doesn't stop the follow-up from happening at all.
+Fix: added a stronger instruction, in both the `change_dir` tool's schema description (`tools.py`) and — per the P6.5b/P5e lesson that the tool-result text is the strongest point of leverage — `_handle_change_dir`'s returned observation (`controller.py`): do NOT run a follow-up command unless the user's request explicitly asked to see/list what's there; if the request was only to change directory, `answer` to confirm and stop.
+Retested live: `doit "go to logs/ folder"` now correctly stops at `change_dir` + `answer`, no unrequested `ls`. Retested the original explicit case too (`doit "go to the logs directory and list files in it"`): still correctly runs `ls` against the resolved path when actually asked. Offline suite 10/10 unchanged; full regression still green.

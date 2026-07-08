@@ -147,3 +147,26 @@ def log_llm_call(session_id: str, request: dict, response: dict) -> None:
         LOGS_DIR / f"{session_id}.jsonl",
         {"ts": time.time(), "request": request, "response": response},
     )
+
+
+# --------------------------------------------------------------------------
+# change_dir (D1 cd-trap fix) — a note file the shell wrapper reads on exit
+# --------------------------------------------------------------------------
+
+
+def cd_target_path(session_id: str) -> Path:
+    """Path to this session's pending cd target, e.g. ~/.doit/cd_target_abc123."""
+    return DOIT_HOME / f"cd_target_{session_id}"
+
+
+def write_cd_target(session_id: str, resolved_path: str) -> None:
+    """Record the directory the shell wrapper should cd into after doit exits.
+
+    A Python subprocess cannot change its parent shell's cwd (D1) — this
+    file is the handoff: the doit() shell function (shell/*_snippet.sh)
+    reads it after `command doit` returns and performs the real cd, then
+    deletes the file.
+    """
+    path = cd_target_path(session_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(resolved_path)

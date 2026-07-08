@@ -8,11 +8,13 @@ codes against (PLAN.md §1). The tools grow by phase:
     ask_user     ask one clarifying question, resolved in-loop     (Phase 5)
     remember     save a durable fact about the user/environment    (Phase 6)
     forget       delete a stored fact by its id                    (Phase 6)
+    change_dir   change the shell's cwd via the shell wrapper (D1)
 
 Schemas use the OpenAI function-calling format, which LiteLLM accepts
 for every provider.
 """
 
+import os
 import subprocess
 from dataclasses import dataclass
 
@@ -172,6 +174,37 @@ TOOL_SCHEMAS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "change_dir",
+            "description": (
+                "Change the current directory for the user's shell (e.g. "
+                "'go to my project folder', 'cd into logs'). A subprocess "
+                "cannot change its parent shell's directory directly — this "
+                "just records the target; the shell wrapper performs the "
+                "real cd after doit exits. Does not end the turn, but do NOT "
+                "automatically add a follow-up command (e.g. ls) just to "
+                "show the new directory's contents — only do that if the "
+                "user's request explicitly asked to see/list what's there. "
+                "If the request was only to change directory, answer to "
+                "confirm and stop."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": (
+                            "The directory to change into — absolute, "
+                            "relative to the current directory, or using ~."
+                        ),
+                    },
+                },
+                "required": ["path"],
+            },
+        },
+    },
 ]
 
 
@@ -204,6 +237,30 @@ def run_command(command: str, shell_path: str, timeout_seconds: int) -> CommandR
             returncode=-1,
             timed_out=True,
         )
+
+
+@dataclass
+class ChangeDirResult:
+    """Outcome of validating a change_dir request."""
+
+    resolved_path: str
+    error: str = ""
+
+
+def resolve_change_dir(path: str) -> ChangeDirResult:
+    """Expand and validate a change_dir target against the real filesystem.
+
+    Resolves ~ and relative paths against the current process's cwd (which
+    doit inherits from the shell that launched it), then checks the result
+    is an existing directory. Validating here — rather than letting the
+    shell wrapper's `cd` fail silently later — lets the controller feed a
+    clear error back to the model instead of writing a bad cd_target file.
+    """
+    expanded = os.path.expanduser(path)
+    resolved = os.path.abspath(expanded)
+    if not os.path.isdir(resolved):
+        return ChangeDirResult(resolved_path=resolved, error=f"no such directory: {resolved}")
+    return ChangeDirResult(resolved_path=resolved)
 
 
 def truncate_for_context(

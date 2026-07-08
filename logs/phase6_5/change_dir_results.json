@@ -1,0 +1,56 @@
+{
+  "passed": 10,
+  "total": 10,
+  "results": [
+    {
+      "case": "change_dir_in_schema",
+      "pass": true,
+      "detail": "names=['answer', 'ask_user', 'change_dir', 'forget', 'remember', 'run_command']"
+    },
+    {
+      "case": "resolve_existing_dir",
+      "pass": true,
+      "detail": "result=ChangeDirResult(resolved_path='/Users/yuvalreuveni/Documents/Claude/Projects/assingment3/bash-llm-agent/doitlib', error='')"
+    },
+    {
+      "case": "resolve_missing_dir_errors",
+      "pass": true,
+      "detail": "error='no such directory: /Users/yuvalreuveni/Documents/Claude/Projects/assingment3/bash-llm-agent/definitely_missing_xyz'"
+    },
+    {
+      "case": "resolve_expands_tilde",
+      "pass": true,
+      "detail": "result=ChangeDirResult(resolved_path='/Users/yuvalreuveni', error='')"
+    },
+    {
+      "case": "resolve_relative_path",
+      "pass": true,
+      "detail": "result=ChangeDirResult(resolved_path='/Users/yuvalreuveni/Documents/Claude/Projects/assingment3/bash-llm-agent/doitlib', error='')"
+    },
+    {
+      "case": "write_cd_target_creates_file",
+      "pass": true,
+      "detail": "path=/var/folders/zz/lc76k61s763cvptl110d54rm0000gn/T/tmpheuk8y19/cd_target_abc123"
+    },
+    {
+      "case": "handle_valid_path",
+      "pass": true,
+      "detail": "obs=\"Directory will change to /Users/yuvalreuveni/Documents/Claude/Projects/assingment3/bash-llm-agent once doit exits \u2014 NOT yet. Do NOT run a follow-up command (e.g. ls) unless the user's request explicitly asked to see/list what's there \u2014 if the request was only to go to this directory, call answer now to confirm and stop. If a follow-up command IS warranted, target /Users/yuvalreuveni/Documents/Claude/Projects/assingment3/bash-llm-agent explicitly (e.g. `ls /Users/yuvalreuveni/Documents/Claude/Projects/assingment3/bash-llm-agent`), do not run a bare command assuming you're already there.\""
+    },
+    {
+      "case": "handle_invalid_path_no_file",
+      "pass": true,
+      "detail": "obs='no such directory: /Users/yuvalreuveni/Documents/Claude/Projects/assingment3/bash-llm-agent/nope_xyz'"
+    },
+    {
+      "case": "change_dir_then_answer",
+      "pass": true,
+      "detail": "seq=['change_dir']"
+    },
+    {
+      "case": "change_dir_then_run_command",
+      "pass": true,
+      "detail": "seq=['change_dir', 'run_command'] cmd='ls /Users/yuvalreuveni/Documents/Claude/Projects/assingment3/bash-llm-agent/doitlib'"
+    }
+  ]
+}
