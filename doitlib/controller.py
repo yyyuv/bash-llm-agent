@@ -53,6 +53,11 @@ MAX_CLARIFICATIONS = 2
 # sequence isn't truncated. This is a ceiling on iterations, not a policy.
 MAX_MEMORY_OPS = 3
 
+# Loop-guard headroom for read_session fetches (Phase 8), same rationale as
+# MAX_MEMORY_OPS: a within-turn step that doesn't pester the user, just
+# needs iteration slack so the model can read another session and then act.
+MAX_SESSION_READS = 3
+
 
 def run_turn(request: str, config: Config) -> None:
     """Handle one user request end to end, printing output as we go."""
@@ -63,10 +68,12 @@ def run_turn(request: str, config: Config) -> None:
     clarifications = 0
     command_steps = 0
 
-    # Loop guard: max_steps command steps + the clarification and memory-op
-    # budgets + a little slack, so a model that never converges still
-    # terminates cleanly.
-    for _ in range(config.max_steps + MAX_CLARIFICATIONS + MAX_MEMORY_OPS + 1):
+    # Loop guard: max_steps command steps + the clarification, memory-op and
+    # session-read budgets + a little slack, so a model that never converges
+    # still terminates cleanly.
+    for _ in range(
+        config.max_steps + MAX_CLARIFICATIONS + MAX_MEMORY_OPS + MAX_SESSION_READS + 1
+    ):
         decision = llm.call(messages, tools.TOOL_SCHEMAS, config, session_id)
 
         if decision.tool_name == "answer":
@@ -90,6 +97,11 @@ def run_turn(request: str, config: Config) -> None:
 
         if decision.tool_name == "change_dir":
             observation = _handle_change_dir(decision.args, session_id, steps)
+            _append_tool_result(messages, decision, observation)
+            continue
+
+        if decision.tool_name == "read_session":
+            observation = _handle_read_session(decision.args, session_id, steps)
             _append_tool_result(messages, decision, observation)
             continue
 
@@ -274,6 +286,25 @@ def _handle_change_dir(args: dict, session_id: str, steps: list) -> str:
         f"{result.resolved_path} explicitly (e.g. `ls {result.resolved_path}`), "
         f"do not run a bare command assuming you're already there."
     )
+
+
+def _handle_read_session(args: dict, current_session_id: str, steps: list) -> str:
+    """Fetch another session's full history and feed it back to the model.
+
+    A within-turn step (Phase 8, Decision 10c): the model asked to see one
+    specific OTHER terminal in detail because the always-injected one-line
+    summary was too thin to reproduce the referenced task. It does not
+    consume a command step, so the model can read the other session and
+    then act (e.g. re-run its folder task here) in the same turn. The
+    detail (or an explanatory message when the id is unknown/self/empty) is
+    rendered by context.render_session_detail and fed back as the tool
+    result; the fetch is recorded in history for the report/audit trail.
+    """
+    target = args.get("session_id", "")
+    detail = context.render_session_detail(target, current_session_id)
+    print(f"· read session {target}", file=sys.stderr)
+    steps.append({"tool": "read_session", "args": args})
+    return detail
 
 
 def _prompt_user(question: str, options: list) -> str:

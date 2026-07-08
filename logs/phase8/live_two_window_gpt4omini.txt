@@ -1,0 +1,85 @@
+Phase 8 — multi-tasking / cross-session awareness (Decision 10c) — live
+Model: openai/gpt-4o-mini (native adapter)
+Date: 2026-07-08
+
+The assignment's exact two-terminal scenario, driven through the real
+`doit` binary with two distinct DOIT_SESSION ids (p8win1, p8win2) — the
+same isolation a real second terminal window would get from the shell
+snippet. Each window acts in its own scratch directory. Both required
+behaviors are exercised: an IMPLICIT reference must stay local to its own
+window; an EXPLICIT cross-reference must reach into the other window.
+
+================================================================
+WINDOW 1 (DOIT_SESSION=p8win1), in .../phase8/win1_dir
+   (dir seeded with alpha.txt, beta.txt, gamma.txt)
+================================================================
+
+$ doit "list the files here"
+$ ls
+alpha.txt
+beta.txt
+gamma.txt
+
+================================================================
+WINDOW 2 (DOIT_SESSION=p8win2), in .../phase8/win2_dir
+================================================================
+
+$ doit "make a directory for every year from 2020 through 2026 in one command"
+⚠ This command modifies the filesystem:
+    mkdir {2020..2026}
+  Creates directories named 2020 through 2026.
+Proceed? [y/N] y
+$ mkdir {2020..2026}
+   -> win2_dir now contains 2020 2021 2022 2023 2024 2025 2026
+
+(Note: window 2 did things MORE RECENTLY than window 1's listing — this is
+the exact condition the assignment calls out, where a naive "most recent
+turn" scheme would wrongly bind window 1's next "them" to these folders.)
+
+================================================================
+WINDOW 1 again (DOIT_SESSION=p8win1) — THE IMPLICIT-REFERENCE TEST
+================================================================
+
+$ doit "now sort them by date"
+$ ls -lt
+total 0
+-rw-r--r--@ 1 yuvalreuveni  wheel  0 Jul  8 18:44 gamma.txt
+-rw-r--r--@ 1 yuvalreuveni  wheel  0 Jul  8 18:44 beta.txt
+-rw-r--r--@ 1 yuvalreuveni  wheel  0 Jul  8 18:44 alpha.txt
+
+RESULT: PASS. "them" correctly resolved to WINDOW 1's own file listing
+(alpha/beta/gamma), NOT window 2's year folders — even though window 2
+acted more recently. This falls out of per-session DOIT_SESSION keying:
+build_messages replays only p8win1's history, so window 2's turns are
+physically absent from this context. The other-sessions summaries block
+sits ABOVE this session's own replayed history, so the implicit "them"
+binds locally.
+
+================================================================
+WINDOW 1 (DOIT_SESSION=p8win1), in a fresh empty dir win1_redo —
+   THE EXPLICIT CROSS-REFERENCE TEST
+================================================================
+
+$ doit "redo here the exact same folder task I did in the other terminal window"
+· read session p8win2                <-- read_session tool fired on the OTHER window
+⚠ This command modifies the filesystem:
+    mkdir {2020..2026}
+  This command creates directories for each year from 2020 to 2026.
+Proceed? [y/N] y
+$ mkdir {2020..2026}
+   -> win1_redo now contains 2020 2021 2022 2023 2024 2025 2026
+
+RESULT: PASS. The explicit reference to "the other terminal window" made
+the model (1) notice session p8win2 in the always-injected other-sessions
+summaries block, (2) call read_session("p8win2") to fetch its full history
+(the `· read session p8win2` line is the controller executing that fetch),
+and (3) reproduce the exact command it found there — mkdir {2020..2026} —
+in the current directory. This is the (c) mechanism end to end: summaries
+for awareness + read_session for on-demand detail.
+
+================================================================
+SUMMARY
+================================================================
+Both halves of Decision 10c verified live on gpt-4o-mini:
+- implicit reference stays LOCAL (per-session keying + block ordering);
+- explicit cross-reference reaches ACROSS (summaries block + read_session).

@@ -50,14 +50,12 @@ def record_turn(session_id: str, turn_record: dict) -> None:
     _append_jsonl(SESSIONS_DIR / f"{session_id}.jsonl", turn_record)
 
 
-def load_recent_turns(session_id: str, limit: int) -> list:
-    """Return this session's most recent completed turns, oldest first.
+def _read_all_turns(path: Path) -> list:
+    """Read every turn record from a session JSONL file, oldest first.
 
-    Reads the session's JSONL history and keeps the last `limit` records
-    (Phase 4: K≈10). A missing file (first turn ever) yields []. Malformed
-    lines are skipped rather than crashing a live request.
+    A missing file yields []. Malformed lines are skipped rather than
+    crashing a live request.
     """
-    path = SESSIONS_DIR / f"{session_id}.jsonl"
     if not path.exists():
         return []
     turns = []
@@ -70,7 +68,79 @@ def load_recent_turns(session_id: str, limit: int) -> list:
                 turns.append(json.loads(line))
             except json.JSONDecodeError:
                 continue
-    return turns[-limit:]
+    return turns
+
+
+def load_recent_turns(session_id: str, limit: int) -> list:
+    """Return this session's most recent completed turns, oldest first.
+
+    Reads the session's JSONL history and keeps the last `limit` records
+    (Phase 4: K≈10). A missing file (first turn ever) yields []. Malformed
+    lines are skipped rather than crashing a live request.
+    """
+    return _read_all_turns(SESSIONS_DIR / f"{session_id}.jsonl")[-limit:]
+
+
+# --------------------------------------------------------------------------
+# Cross-session awareness (Phase 8, Decision 10c) — summaries of OTHER
+# terminals + on-demand fetch of one in full
+# --------------------------------------------------------------------------
+
+# Sessions untouched for longer than this are treated as stale and left out
+# of the always-injected summaries block, so old terminals don't pollute
+# context (the (a)-option con Decision 10 calls out). A user can still fetch
+# one explicitly by id via read_session if they refer to it.
+OTHER_SESSION_MAX_AGE_SECONDS = 24 * 3600
+
+
+def _turn_ts(turn: dict):
+    """Best-effort float timestamp of a turn record, or None if absent."""
+    ts = turn.get("ts")
+    try:
+        return float(ts)
+    except (TypeError, ValueError):
+        return None
+
+
+def list_other_sessions(
+    current_session_id: str,
+    max_sessions: int = 5,
+    requests_per_session: int = 2,
+    max_age_seconds: float = OTHER_SESSION_MAX_AGE_SECONDS,
+) -> list:
+    """Summarize OTHER terminals' sessions for cross-session awareness.
+
+    Scans sessions/*.jsonl (excluding the current session), and for each
+    one that has activity within max_age_seconds returns a lightweight
+    record: {id, ts, cwd, requests} where `requests` is the last few
+    plain-English requests made in that session — a cheap heuristic summary
+    ("request + recent activity"), not an extra LLM summarize() call (that
+    is the documented upgrade path if quality demands, Decision 10 note).
+
+    Most-recently-active first, capped at max_sessions. This is what powers
+    the always-injected summaries block; read_session fetches the full
+    detail of one on demand.
+    """
+    if not SESSIONS_DIR.exists():
+        return []
+    now = time.time()
+    summaries = []
+    for path in SESSIONS_DIR.glob("*.jsonl"):
+        sid = path.stem
+        if sid == current_session_id:
+            continue
+        turns = _read_all_turns(path)
+        if not turns:
+            continue
+        last_ts = _turn_ts(turns[-1])
+        if max_age_seconds is not None and last_ts is not None and now - last_ts > max_age_seconds:
+            continue
+        requests = [t.get("request", "") for t in turns[-requests_per_session:] if t.get("request")]
+        summaries.append(
+            {"id": sid, "ts": last_ts, "cwd": turns[-1].get("cwd", ""), "requests": requests}
+        )
+    summaries.sort(key=lambda s: s["ts"] or 0, reverse=True)
+    return summaries[:max_sessions]
 
 
 # --------------------------------------------------------------------------

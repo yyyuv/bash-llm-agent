@@ -1,0 +1,8 @@
+Other recent terminal sessions (OTHER windows, not this one — most recent
+first). These are separate from your own conversation history above. Only
+use them when the user EXPLICITLY refers to work done in another window
+(e.g. "redo the folder task from the other terminal"). An implicit
+reference like "them", "these", or "that" means THIS session's own recent
+activity, never these. If a summary line is too thin to actually redo the
+task, call read_session with its [id] to see that session in full:
+{sessions}

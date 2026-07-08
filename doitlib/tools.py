@@ -3,12 +3,13 @@
 The tool set IS the decision schema — the single contract every model
 codes against (PLAN.md §1). The tools grow by phase:
 
-    run_command  execute one shell command                        (Phase 1)
-    answer       reply in plain text; also the signal that ends the loop
-    ask_user     ask one clarifying question, resolved in-loop     (Phase 5)
-    remember     save a durable fact about the user/environment    (Phase 6)
-    forget       delete a stored fact by its id                    (Phase 6)
-    change_dir   change the shell's cwd via the shell wrapper (D1)
+    run_command   execute one shell command                       (Phase 1)
+    answer        reply in plain text; also the signal that ends the loop
+    ask_user      ask one clarifying question, resolved in-loop    (Phase 5)
+    remember      save a durable fact about the user/environment   (Phase 6)
+    forget        delete a stored fact by its id                   (Phase 6)
+    change_dir    change the shell's cwd via the shell wrapper (D1)
+    read_session  fetch another terminal's history in full         (Phase 8)
 
 Schemas use the OpenAI function-calling format, which LiteLLM accepts
 for every provider.
@@ -202,6 +203,36 @@ TOOL_SCHEMAS = [
                     },
                 },
                 "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_session",
+            "description": (
+                "Fetch the full recent history of ANOTHER terminal session "
+                "by its id (the [id] shown in the 'Other recent terminal "
+                "sessions' block). Use this ONLY when the user explicitly "
+                "refers to work done in a different window and the one-line "
+                "summary is not detailed enough to reproduce or discuss it "
+                "(e.g. 'redo the exact folder task from the other terminal'). "
+                "Do NOT use it for references to this session's own recent "
+                "activity. This does not end the turn: the fetched history "
+                "comes back to you and you continue in the same turn."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "session_id": {
+                        "type": "string",
+                        "description": (
+                            "The id of the other session to read, e.g. "
+                            "'f4a2', taken from the other-sessions block."
+                        ),
+                    },
+                },
+                "required": ["session_id"],
             },
         },
     },

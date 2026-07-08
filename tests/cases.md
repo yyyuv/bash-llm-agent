@@ -234,3 +234,28 @@ real `doit` binary + real model; case 44 already proved the hook itself
 works end to end in a real interactive terminal.)
 
 ## Phase 7: gate CLOSED — 2026-07-08, all 4 cases passing on gpt-4o-mini.
+
+## Phase 8 (multi-tasking / cross-session awareness, Decision 10c) — LIVE
+
+Offline: `tests/multitask_tests.py` (16/16 — `list_other_sessions` filtering/
+ordering/recency/caps, the summaries block, `render_session_detail`,
+`build_messages` block-injection + ordering, `_handle_read_session`, and a
+run_turn read_session→run_command integration). **Live** — the assignment's
+exact two-terminal scenario, driven through the real `doit` binary with two
+distinct `DOIT_SESSION` ids (the same isolation a second real terminal gets
+from the shell snippet). Transcript in `logs/phase8/`; genuine session files
+preserved at `~/.doit/sessions/p8win1.jsonl` + `p8win2.jsonl`.
+
+| # | scenario | invocation | expected behavior | result |
+|---|---|---|---|---|
+| 48 | window 1 listed files; window 2 then created year folders (more recent) | window 1: `doit "now sort them by date"` | IMPLICIT ref stays LOCAL — `ls -t` on window 1's own files, NOT window 2's folders, despite window 2 acting more recently | PASS — `logs/phase8/live_two_window_gpt4omini.txt` |
+| 49 | same two sessions as #48 | window 1: `doit "redo here the exact same folder task I did in the other terminal window"` | EXPLICIT cross-ref reaches ACROSS — `read_session("p8win2")` fires, model fetches window 2's `mkdir {2020..2026}` and reproduces it here | PASS — `logs/phase8/live_two_window_gpt4omini.txt` |
+| 50 | single terminal, no other recent sessions | any request | other-sessions block absent entirely (skipped when empty); no spurious cross-session noise | PASS (offline `test_block_empty_when_no_others` + `test_build_injects_block_only_with_others`); covered live implicitly |
+
+Watch for: a weak local model over-reaching into another session on an
+implicit reference (binding "them" to the wrong window), or failing to call
+`read_session` on an explicit cross-reference (two-step retrieval is where
+8B models stumble) — exactly the model-comparison content Decision 10(c)
+exists to make robust. TODO: run 48/49 on a local Ollama model too.
+
+## Phase 8: gate CLOSED — 2026-07-08, both required behaviors passing on gpt-4o-mini.
