@@ -30,23 +30,31 @@
 //   shell-side real cd                <-> shell/zshrc_snippet.sh, shell/bashrc_snippet.sh (doit() wrapper)
 //   result fed back as tool result    <-> controller._append_tool_result (T: native / U: prompted)
 //   everything else                   <-> unchanged from v6
+//
+// Context-only reminder (same convention as v2/v5/v6): every If/ElseIf below
+// tests controller-only state (sys.tool_call, sys.resolved_path.is_dir) —
+// that state is never itself sent to the model. Only the S:/U:/A:/T: lines
+// are real messages; the branches just select WHICH message gets emitted.
+// (The path validation and cd_target file write are controller/filesystem
+// work — tools.resolve_change_dir / state.write_cd_target — not shown here,
+// only their outcome as a T: result.)
 
 DoitAgentV6_5ChangeDir[@T, I]: {
-    S: {
+    S: {                          // system prompt — sent once, first message
         AGENT_INSTRUCTIONS        // role, safety, when-to-ask, when-to-remember
                                   //   + change_dir-vs-run_command's `cd` policy
                                   //   + same-turn-command-targets-resolved-path rule
         AVAILABLE_TOOLS           // run_command, ask_user, answer, remember, forget,
                                   // change_dir(path)   -- 6 tools now
     }
-    U: {
+    U: {                          // ambient environment facts, as a user message
         env.cwd
         env.datetime
         env.shell
         env.os
     }
 
-    U: {
+    U: {                          // known-facts block, unchanged from v6
         MEMORY_HEADER
         ForEach(m: sys.memories) { sys.memory_line[m] }
     }
@@ -73,9 +81,13 @@ DoitAgentV6_5ChangeDir[@T, I]: {
     }
 
     // --- the current turn ---
+    // As in v6: the If/ElseIf branches test controller-only state (which
+    // tool was called, whether the path resolved to a real directory); only
+    // the resulting T: line is ever appended to the model's context.
     U: env.user_request[@T]
     ForEach(@i: range(1, I)) {
         A: sys.tool_call[@T.i]                    // ... | change_dir
+                                                    // (the model's own decision, replayed as context)
 
         If sys.tool_call[@T.i] == change_dir {
             If sys.resolved_path.is_dir {
@@ -88,8 +100,8 @@ DoitAgentV6_5ChangeDir[@T, I]: {
         }
 
         ElseIf sys.tool_call[@T.i] == run_command {
-            // unchanged safety-gate branch from v6
+            // unchanged safety-gate branch from v6 (see that file for detail)
         }
-        // answer ends the turn.
+        // answer ends the turn (the finish signal) — no further T: is emitted.
     }
 }

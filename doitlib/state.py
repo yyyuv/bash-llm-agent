@@ -3,6 +3,9 @@
 Layout:
     sessions/<session_id>.jsonl  one JSON record per completed turn
     memories.json                cross-session facts about the user (Phase 6)
+    shell_hist/<session_id>      ts|cwd|cmd lines from the PROMPT_COMMAND/
+                                  precmd shell hook (Phase 7 — every command
+                                  this terminal ran, including doit itself)
     logs/<session_id>.jsonl      raw LLM requests/responses (report evidence)
 
 The session id comes from the DOIT_SESSION environment variable, which
@@ -23,6 +26,7 @@ DOIT_HOME = Path.home() / ".doit"
 SESSIONS_DIR = DOIT_HOME / "sessions"
 LOGS_DIR = DOIT_HOME / "logs"
 MEMORIES_PATH = DOIT_HOME / "memories.json"
+SHELL_HIST_DIR = DOIT_HOME / "shell_hist"
 
 
 def get_session_id() -> str:
@@ -67,6 +71,46 @@ def load_recent_turns(session_id: str, limit: int) -> list:
             except json.JSONDecodeError:
                 continue
     return turns[-limit:]
+
+
+# --------------------------------------------------------------------------
+# User shell history (Phase 7) — what the user typed manually, per session
+# --------------------------------------------------------------------------
+
+
+def load_recent_user_commands(session_id: str, limit: int) -> list:
+    """Return up to `limit` most recent commands the USER ran manually.
+
+    Reads ~/.doit/shell_hist/<session_id>, written by the shell hook
+    (PROMPT_COMMAND on bash, precmd on zsh) as `ts|cwd|cmd` lines for
+    EVERY command the terminal runs, doit invocations included. This
+    filters those back out: a command that is `doit` or starts with
+    `doit ` is doit being invoked, not something doit itself ran — the
+    simpler of the two signals from PLAN_DETAILED.md Section 9 (the other
+    being cross-referencing sessions/*.jsonl), chosen because it needs no
+    matching logic and is near-sufficient in practice.
+
+    A missing file (no shell hook installed yet, or a brand-new terminal)
+    yields [] rather than crashing a live request — same posture as
+    load_recent_turns. Malformed lines are skipped.
+    """
+    path = SHELL_HIST_DIR / session_id
+    if not path.exists():
+        return []
+    commands = []
+    with open(path) as file:
+        for line in file:
+            line = line.rstrip("\n")
+            if not line:
+                continue
+            parts = line.split("|", 2)
+            if len(parts) != 3:
+                continue
+            ts, cwd, cmd = parts
+            if cmd == "doit" or cmd.startswith("doit "):
+                continue
+            commands.append({"ts": ts, "cwd": cwd, "cmd": cmd})
+    return commands[-limit:]
 
 
 # --------------------------------------------------------------------------

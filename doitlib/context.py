@@ -25,6 +25,11 @@ PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 # would summarize them instead.
 HISTORY_TURNS = 10
 
+# Cap on how many manually-run shell commands (Phase 7) are shown per turn —
+# same rationale as HISTORY_TURNS: bound the block instead of dumping an
+# ever-growing per-terminal file into every request.
+USER_SHELL_HISTORY_LIMIT = 20
+
 
 def agent_instructions() -> str:
     """AGENT_INSTRUCTIONS: the static system prompt (role + policies)."""
@@ -135,14 +140,39 @@ def _replay_turn(turn: dict) -> list:
     return messages
 
 
+def user_shell_history_block(session_id: str) -> str:
+    """USER_SHELL_HISTORY: commands the user typed manually in this terminal.
+
+    Phase 7 (Section 9 / user awareness): the shell hook logs every command
+    this terminal runs, doit invocations included; state.load_recent_user_
+    commands already filtered those back out, so everything here is
+    something the USER ran directly — cd, mkdir, editing a file, running a
+    script — that doit itself never saw or executed. This is what lets
+    "summarize what I just did" or "why did my last command fail" resolve
+    against manual activity, distinct from the replayed session history
+    above (which is doit's own tool calls).
+
+    Returns "" when there is no shell history yet (hook not installed, or
+    nothing typed this terminal), so build_messages can skip the block.
+    """
+    commands = state.load_recent_user_commands(session_id, USER_SHELL_HISTORY_LIMIT)
+    if not commands:
+        return ""
+    lines = "\n".join(f"  [in {c['cwd']}] {c['cmd']}" for c in commands)
+    template = (PROMPTS_DIR / "user_shell_history_block.txt").read_text()
+    return template.format(commands=lines)
+
+
 def build_messages(request: str, config: Config, session_id: str) -> list:
     """Assemble the full message list for the first LPU call of a turn.
 
     Order: system instructions -> current environment -> persistent memory
-    -> replayed history (last K turns) -> the current request. Memory sits
-    with the ambient setup (it is context that holds for every turn, not
-    tied to any one turn); history and then the request follow, so a
-    reference in the request resolves against the turns just above it.
+    -> replayed history (last K turns) -> manual shell history -> the
+    current request. Memory sits with the ambient setup (it is context
+    that holds for every turn, not tied to any one turn); history, then
+    the user's manual shell activity, then the request follow, so a
+    reference in the request resolves against the turns and commands just
+    above it (matches the ACDL ordering in acdl/v7_useraware.acdl).
     """
     messages = [
         {"role": "system", "content": agent_instructions()},
@@ -151,5 +181,7 @@ def build_messages(request: str, config: Config, session_id: str) -> list:
     if memory := memory_block():
         messages.append({"role": "user", "content": memory})
     messages.extend(history_messages(session_id))
+    if shell_history := user_shell_history_block(session_id):
+        messages.append({"role": "user", "content": shell_history})
     messages.append({"role": "user", "content": user_request(request)})
     return messages

@@ -66,6 +66,13 @@ resolve "my project folder" or apply a stored default sort order — without
 being asked again. If a single request both states a fact to remember and
 needs a command run, call remember FIRST and then run the command.
 
+You may also see a "Commands the USER ran manually in this terminal" block.
+These are real shell commands the user typed themselves, outside of doit —
+distinct from the tool calls shown elsewhere. Use it to answer questions
+about what the user just did ("summarize what I just did", "why did my
+last command fail", "what was I doing before this") by reading those
+commands and their directories directly; do not re-run them unless asked.
+
 Earlier turns of this conversation may be shown to you as context. When a
 new request refines or changes a previous one ("now sort them by date",
 "in ascending order", "by creation time instead"), build the command from

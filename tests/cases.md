@@ -198,3 +198,39 @@ entangling with unrelated config) before trusting it in the real shell.
 | 43 | same request as #42, plain "go to X" with no listing asked for | should NOT run an unrequested follow-up command | FAILED first (model added a self-initiated `ls` hitting the old-cwd trap, P6.5b's fix didn't stop it since nothing told the model not to add it); FIXED by strengthening both the tool schema and the tool-result text (DECISIONS.md P6.5d); retested PASS on both the plain request (no `ls`) and the explicit "...and list it" request (still lists correctly) |
 
 Also verified: the real `~/.zshrc` was backed up (`~/.zshrc.doit-backup-<timestamp>`) before the snippet was appended, wrapped in `# >>> doit integration >>>` markers.
+
+## Phase 7 (user shell-history awareness) — LIVE IN PROGRESS
+
+Offline: `tests/user_awareness_tests.py` (10/10 — shell_hist parsing, filtering
+out doit's own invocations, malformed/missing-file handling, the
+`USER_SHELL_HISTORY_LIMIT=20` cap, per-session isolation, and the block's
+presence/absence/position in `build_messages`) — all against synthetic
+shell_hist files, no real shell hook exercised.
+
+**Setup snag (fixed):** the first live attempt hit stale config — `~/.zshrc`
+still had the pre-Phase-7 snippet (the repo's `shell/zshrc_snippet.sh` had
+been updated, but the *live* `~/.zshrc` had not), so `~/.doit/shell_hist`
+was never created and doit fell back to summarizing the memory/environment
+blocks instead of real activity. Fixed by re-applying the updated snippet
+to the live `~/.zshrc` (backed up first as `~/.zshrc.doit-backup-<ts>`) and
+re-sourcing. Lesson for future phases that touch the shell snippets:
+editing `shell/*_snippet.sh` in the repo does NOT touch the user's actual
+`~/.zshrc` / `~/.bashrc` — that's a separate, explicit live-edit step.
+
+| # | manual shell activity (typed directly, not through doit) | invocation | expected behavior | result |
+|---|---|---|---|---|
+| 44 | `cd logs`, `cd ..`, `mkdir data2`/`data3` (across two sub-sessions), plus a `doit "delete the logs"` and `doit "summarize..."` in between | `doit "summarize what I just did"` | `answer` naming the real manual commands (both `mkdir`s, the `cd` round trips), grounded in `USER_SHELL_HISTORY` — no `doit "..."` invocation lines leak in | PASS — `logs/phase7/live_summarize_gpt4omini.txt` |
+| 45 | `cat missing_file_xyz.txt` (real command, exits 1) | `doit "why did my last command fail?"` | `answer` referencing the failed command from shell history (doit never ran it, so this can only come from the hook) | PASS — `logs/phase7/live_cases_45_46_47_gpt4omini.txt` |
+| 46 | user manually `cd`s 3 levels into a scratch dir, no doit call in between | `doit "what directory am I in?"` | reports the cwd from the newest shell_hist line / `os.getcwd()`, not a stale value from an earlier doit turn | PASS — `logs/phase7/live_cases_45_46_47_gpt4omini.txt` |
+| 47 | nothing typed yet this terminal (fresh `DOIT_SESSION`, hook installed) | `doit "what did I just do?"` | honestly reports there's no recent manual activity to summarize — the block is empty/absent, not hallucinated | PASS — `logs/phase7/live_cases_45_46_47_gpt4omini.txt` |
+
+Watch for: a weak local model inventing plausible-sounding manual commands
+instead of reading the block verbatim (hallucination under an empty/short
+`USER_SHELL_HISTORY`) — exactly the kind of model-comparison content this
+suite exists to surface. (Cases 45–47 were driven from a non-interactive
+shell that can't run the real precmd/PROMPT_COMMAND hook — each appends
+one line to shell_hist in the exact format the hook writes, then calls the
+real `doit` binary + real model; case 44 already proved the hook itself
+works end to end in a real interactive terminal.)
+
+## Phase 7: gate CLOSED — 2026-07-08, all 4 cases passing on gpt-4o-mini.

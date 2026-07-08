@@ -1,0 +1,60 @@
+Phase 7 — user shell-history awareness — live transcript, cases 45–47
+Model: openai/gpt-4o-mini (native adapter)
+Date: 2026-07-08
+
+These three cases were driven from a non-interactive shell (Claude's tool
+sandbox), which cannot run the real precmd/PROMPT_COMMAND hook (it only
+fires across an interactive shell's prompt cycle, not one-off tool calls).
+Case 44 (logs/phase7/live_summarize_gpt4omini.txt) already proved the real
+hook populates shell_hist correctly in Yuval's actual terminal. To isolate
+and verify the MODEL's behavior on shell-history content for cases 45–47,
+each case appends one line to ~/.doit/shell_hist/<session> in the exact
+`ts|cwd|cmd` format the hook itself writes (the same thing the hook would
+have produced for that command), then calls the real `doit` binary against
+the real API model — nothing about state.load_recent_user_commands,
+context.user_shell_history_block, or the LLM call itself is stubbed.
+
+--- case 45: command-failure recall ---
+
+Setup: cd into a scratch dir, run `cat missing_file_xyz.txt` (real
+command, exits 1), log line appended for it.
+
+$ cat missing_file_xyz.txt
+cat: missing_file_xyz.txt: No such file or directory
+$ doit "why did my last command fail?"
+Your last command `cat missing_file_xyz.txt` likely failed because the
+file `missing_file_xyz.txt` does not exist in the current directory.
+
+Result: PASS — doit never ran this command itself (session history is
+empty for this ID); the answer can only have come from USER_SHELL_HISTORY.
+
+--- case 46: cwd after a manual cd ---
+
+Setup: cd into a nested scratch dir three levels deep, log line appended
+for the `cd`.
+
+$ pwd
+.../scratchpad/phase7_case46/nested/dir
+$ doit "what directory am I in?"
+You are currently in the directory:
+`.../scratchpad/phase7_case46/nested/dir`.
+
+Result: PASS — matches the real cwd exactly (ground truth is
+os.getcwd(), corroborated by the newest shell_hist line, per
+PLAN_DETAILED.md Section 9's "also solved by this hook" note).
+
+--- case 47: empty history, fresh session ---
+
+Setup: brand-new DOIT_SESSION never used before; ~/.doit/shell_hist/<id>
+does not exist.
+
+$ doit "what did I just do?"
+You haven't run any commands in this terminal session yet.
+
+Result: PASS — no hallucinated activity; the model correctly reports
+nothing to summarize when USER_SHELL_HISTORY is absent (context.
+user_shell_history_block returns "" and the block is skipped entirely).
+
+--- summary ---
+
+44/45/46/47 all PASS on openai/gpt-4o-mini. Phase 7 gate: CLOSED.
