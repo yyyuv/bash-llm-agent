@@ -1,0 +1,51 @@
+Phase 6 — remaining live cases (36, 38, retarget bonus)
+Model: openai/gpt-4o-mini (native adapter)   Date: 2026-07-08
+Pre-existing memories: [m1] the user prefers ls sorted by size
+                       [m2] the user's favourite folder is /prompts
+
+--------------------------------------------------------------------------------
+CASE 36 — cross-session recall (P6b: memories are NOT session-scoped)
+Session: DOIT_SESSION=p6case36 (fresh, never touched memory before)
+
+$ doit "what's my favourite folder?"
+Your favourite folder is /prompts.
+
+$ doit "how do I like ls sorted?"
+You prefer `ls` sorted by size.
+
+Result: both facts recalled correctly from a session that never set them.
+Confirms P6b (single shared store, not keyed by DOIT_SESSION).
+
+--------------------------------------------------------------------------------
+CASE 38 — anti-clutter (transient detail should NOT be remembered)
+Session: DOIT_SESSION=p6case38 (fresh)
+
+$ doit "I'm looking for a file I saved yesterday"
+I can't search for files based on specific dates, but you can use the
+`ls -lt` command to list files sorted by modification time, which will
+help you find recently modified files.
+
+memories.json before: [m1, m2] (unchanged)
+memories.json after:  [m1, m2] (unchanged)
+
+Result: no remember call for a transient request. Anti-clutter policy holds.
+
+--------------------------------------------------------------------------------
+BONUS — retarget check with 2 memories present (post P6e fix)
+Session: DOIT_SESSION=p6retarget (fresh)
+
+$ doit "I changed my mind about the sort order — ask me each time instead"
+· forgot m1
+· remembered [m3]: ask the user for the sort order each time
+I've updated your preferences to ask for the sort order each time.
+
+memories.json after:
+  [m2] the user's favourite folder is /prompts   (untouched)
+  [m3] ask the user for the sort order each time  (new)
+
+Result: forgot the CORRECT memory (m1, the sort preference) and left the
+unrelated m2 (favourite folder) intact. The earlier wrong-forget-target bad
+behavior (DECISIONS.md, pre-P6e) did NOT reproduce here -- consistent with
+that behavior having been a side-effect of the crash-loop's repeated,
+identical history entries rather than a standalone targeting flaw.
+--------------------------------------------------------------------------------

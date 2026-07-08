@@ -430,6 +430,10 @@ The visible `[id]`s are what make **editing** work: "I changed my mind about the
 - **(b) Relevance filtering** (embed memories, retrieve top-k per request). Pro: scales; impressive-sounding. Con: real complexity (embedding model, index), new failure mode (the *needed* memory doesn't get retrieved — worse than distraction), hard to debug.
 Recommendation: (a), with (b) described as future work — OR as one of your three extension *descriptions* (free content for Phase 9!).
 
+✅ **DECISION 9 — CHOSEN: (a)**, per above. Implemented in Phase 6.
+
+**Bug found + fixed during Phase 6 (memory edits crashed):** gpt-4o-mini bundles `forget`+`remember` as two tool calls in one reply; the controller only answers one, so replaying the other unanswered crashed the next call (and deleted memories along the way — `forget` had already run). Chose to trim to the one call answered (safety + simplicity: one LPU call stays one Decision) over rewriting the controller to handle several calls per step (cheaper per call, but reshapes core loop invariants). Full writeup: DECISIONS.md P6e.
+
 ---
 
 ## Section 9 — User awareness + Output awareness (Phase 7)

@@ -1,0 +1,142 @@
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % set -a; source .env; set +a
+
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % export DOIT_SESSION=mem1
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "remember that ~/school/llms/ass3 is my project folder"
+
+· remembered [m1]: ~/school/llms/ass3 is my project folder
+I've remembered that your project folder is ~/school/llms/ass3.
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % cat ~/.doit/memories.json 
+[
+  {
+    "id": "m1",
+    "ts": 1783507336.057919,
+    "text": "~/school/llms/ass3 is my project folder"
+  }
+]%                                                                                                                                                                                                         
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "what's my project folder?" 
+Your project folder is ~/school/llms/ass3.
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "remember I prefer ls sorted by size"
+· remembered [m2]: the user prefers ls sorted by size
+I've remembered that you prefer `ls` sorted by size.
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % cat ~/.doit/memories.json                 
+[
+  {
+    "id": "m1",
+    "ts": 1783507336.057919,
+    "text": "~/school/llms/ass3 is my project folder"
+  },
+  {
+    "id": "m2",
+    "ts": 1783507368.144929,
+    "text": "the user prefers ls sorted by size"
+  }
+]%                                                                                                                                                                                                         
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "show me all the files in my path"
+$ ls -S
+PLAN_DETAILED.md
+DECISIONS.md
+PLAN.md
+CLAUDE.md
+doit
+doitlib
+logs
+acdl
+sessions
+tests
+prompts
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "with their size"
+$ ls -lS
+total 256
+-rw-r--r--@  1 yuvalreuveni  staff  44592 Jul  7 18:29 PLAN_DETAILED.md
+-rw-r--r--@  1 yuvalreuveni  staff  39342 Jul  8 13:38 DECISIONS.md
+-rw-r--r--@  1 yuvalreuveni  staff  17995 Jul  7 18:15 PLAN.md
+-rw-r--r--@  1 yuvalreuveni  staff  16830 Jul  8 13:39 CLAUDE.md
+-rwxr-xr-x@  1 yuvalreuveni  staff   1319 Jul  7 15:00 doit
+drwxr-xr-x@ 11 yuvalreuveni  staff    352 Jul  8 13:35 doitlib
+drwxr-xr-x@  9 yuvalreuveni  staff    288 Jul  8 13:37 logs
+drwxr-xr-x@  8 yuvalreuveni  staff    256 Jul  8 13:36 acdl
+drwxr-xr-x@  8 yuvalreuveni  staff    256 Jul  7 17:45 sessions
+drwxr-xr-x@  8 yuvalreuveni  staff    256 Jul  8 13:39 tests
+drwxr-xr-x@  7 yuvalreuveni  staff    224 Jul  8 13:35 prompts
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "I changed my mind — ask me each time instead"
+· forgot m2
+
+Give Feedback / Get Help: https://github.com/BerriAI/litellm/issues/new
+LiteLLM.Info: If you need to debug this error, use `litellm._turn_on_debug()'.
+
+doit: error: litellm.BadRequestError: OpenAIException - An assistant message with 'tool_calls' must be followed by tool messages responding to each 'tool_call_id'. The following tool_call_ids did not have response messages: call_xEetwmUTlfIy1s7JvNOoLyjW
+doit: set DOIT_DEBUG=1 for the full traceback
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "I changed my mind — ask me each time instead"
+· no memory m2 to forget
+
+Give Feedback / Get Help: https://github.com/BerriAI/litellm/issues/new
+LiteLLM.Info: If you need to debug this error, use `litellm._turn_on_debug()'.
+
+doit: error: litellm.BadRequestError: OpenAIException - An assistant message with 'tool_calls' must be followed by tool messages responding to each 'tool_call_id'. The following tool_call_ids did not have response messages: call_Y7pa71OGS7dDGC3go8gEMwKs
+doit: set DOIT_DEBUG=1 for the full traceback
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "show me all the files in my path"            
+$ ls -lS
+total 256
+-rw-r--r--@  1 yuvalreuveni  staff  44592 Jul  7 18:29 PLAN_DETAILED.md
+-rw-r--r--@  1 yuvalreuveni  staff  39342 Jul  8 13:38 DECISIONS.md
+-rw-r--r--@  1 yuvalreuveni  staff  17995 Jul  7 18:15 PLAN.md
+-rw-r--r--@  1 yuvalreuveni  staff  16830 Jul  8 13:39 CLAUDE.md
+-rwxr-xr-x@  1 yuvalreuveni  staff   1319 Jul  7 15:00 doit
+drwxr-xr-x@ 11 yuvalreuveni  staff    352 Jul  8 13:35 doitlib
+drwxr-xr-x@  9 yuvalreuveni  staff    288 Jul  8 13:37 logs
+drwxr-xr-x@  8 yuvalreuveni  staff    256 Jul  8 13:36 acdl
+drwxr-xr-x@  8 yuvalreuveni  staff    256 Jul  7 17:45 sessions
+drwxr-xr-x@  8 yuvalreuveni  staff    256 Jul  8 13:39 tests
+drwxr-xr-x@  7 yuvalreuveni  staff    224 Jul  8 13:35 prompts
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "I changed my mind — ask me each time instead"
+· no memory m2 to forget
+
+Give Feedback / Get Help: https://github.com/BerriAI/litellm/issues/new
+LiteLLM.Info: If you need to debug this error, use `litellm._turn_on_debug()'.
+
+doit: error: litellm.BadRequestError: OpenAIException - An assistant message with 'tool_calls' must be followed by tool messages responding to each 'tool_call_id'. The following tool_call_ids did not have response messages: call_r9P1E5dLjtJtWczrDS9HYtgt
+doit: set DOIT_DEBUG=1 for the full traceback
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "remember I prefer ls sorted by size"         
+· no memory m2 to forget
+· remembered [m2]: I prefer ls sorted by size.
+I've remembered that you prefer `ls` sorted by size.
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "I changed my mind — ask me each time instead"
+· forgot m2
+
+Give Feedback / Get Help: https://github.com/BerriAI/litellm/issues/new
+LiteLLM.Info: If you need to debug this error, use `litellm._turn_on_debug()'.
+
+doit: error: litellm.BadRequestError: OpenAIException - An assistant message with 'tool_calls' must be followed by tool messages responding to each 'tool_call_id'. The following tool_call_ids did not have response messages: call_cXLEOsiYCsnmS3PnCe86kUwG
+doit: set DOIT_DEBUG=1 for the full traceback
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % cat ~/.doit/memories.json                          
+[
+  {
+    "id": "m1",
+    "ts": 1783507336.057919,
+    "text": "~/school/llms/ass3 is my project folder"
+  }
+]%                                                                                                                                                                                                         
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "remember I prefer ls sorted by size"         
+· no memory m2 to forget
+· forgot m1
+· remembered [m1]: I prefer ls sorted by size.
+I've remembered that you prefer `ls` sorted by size.
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % cat ~/.doit/memories.json                 
+[
+  {
+    "id": "m1",
+    "ts": 1783507569.328798,
+    "text": "I prefer ls sorted by size."
+  }
+]%                                                                                                                                                                                                         
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "I changed my mind — ask me each time instead"
+· forgot m1
+
+Give Feedback / Get Help: https://github.com/BerriAI/litellm/issues/new
+LiteLLM.Info: If you need to debug this error, use `litellm._turn_on_debug()'.
+
+doit: error: litellm.BadRequestError: OpenAIException - An assistant message with 'tool_calls' must be followed by tool messages responding to each 'tool_call_id'. The following tool_call_ids did not have response messages: call_pCkcvuPU0GOGiLjCzVLjtR8F
+doit: set DOIT_DEBUG=1 for the full traceback
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % cat ~/.doit/memories.json                          
+[]%                                                                                                                                                                                                        
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % 

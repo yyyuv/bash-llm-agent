@@ -202,5 +202,45 @@ Also (realizing D8): there is no destructiveness field on `ask_user` and nothing
 ### P5c — Section 7 (richer interactions) needs zero new code
 Chosen: "how do I X?" is just `answer`; the "modify it to do y" → "execute it" chain resolves through the Phase 4 history replay — the model lifts a command out of its own previous `answer` and passes it to `run_command`. No classifier, no new tool. Put this exact 3-step chain in the model-comparison suite; the weak model fumbling turn 3 ("execute what?") is prime report material (PLAN §5).
 
+### P5e — bug: identical "how do I" question executed on repeat — FIXED
+Issue: live run (logs/phase5/live_richer_interactions_history_bleed.txt) — turn 1 "how do i find python files modified this week?" correctly answered; turn 2 "modify it..." ran a refined command; turn 3, the exact same turn-1 wording, EXECUTED the command instead of answering.
+Attempt 1 (failed): added a separate system-prompt paragraph — "a literal question always gets answer". Retested live (logs/phase5/live_richer_interactions_retest_after_prompt_fix.txt): still executed. Root cause: the existing action-verb rule explicitly lists "find" and says "always run_command" — a separate, later paragraph couldn't override a specific keyword match in an earlier rule.
+Attempt 2 (fixed): moved the exception INSIDE the action-verb rule itself, right where the conflict is (same pattern as P1f's vim/edit carve-out). Retested live (logs/phase5/live_richer_interactions_fixed.txt): turn 3 now correctly answers. Offline suite still 14/12/10/10 green.
+Lesson: prompt rules conflict by proximity/specificity, not just presence — a general exception must sit inside the specific rule it overrides, not in a separate paragraph.
+
 ### P5d — past ask_user exchanges are replayed into history
 Chosen: `context._replay_turn` renders a stored `ask_user` step as `A:"(asked) <question>"` + `U:"(answered) <reply>"` (or `"(no answer)"`), so a clarification's answer stays visible to later turns — otherwise a follow-up couldn't see what the user had already disambiguated. Same plain-U:/A: shape as every other replayed step (P4a: no live tool_call_id cross-turn).
+
+## Phase 6 scope gate lifted — 2026-07-08
+
+### Scope gate: Phase 6 reviewed and locked; D9 resolved
+Yuval approved the **Phase 6** (memory) scope on 2026-07-08 and resolved the open D9 (see below). Locked Phase 6 scope: two new tools `remember(fact)` / `forget(id)`; a single shared `memories.json` (NOT per-session); all memories injected every turn with visible ids; memory ops are within-turn steps (not command steps); editing = forget + remember. **Phases 7–9 remain ⏸-gated** — re-review before starting.
+
+### D9 — memory injection: inject ALL memories always (option a)
+Chosen PLAN_DETAILED option (a): every stored memory is injected into context on every turn, no relevance filtering. Rejected (for now) option (b) embedding-based top-k retrieval.
+Rationale: at this scale (dozens of facts at most) the token cost is negligible and nothing relevant is ever silently missing; (b) adds a real embedding model + index and a new failure mode (the *needed* memory not retrieved — worse than mild distraction) that is hard to debug. **(b) is documented as future work** and is a candidate for one of the three Phase 9 extension *descriptions* (free report content) — per Yuval's instruction on 2026-07-08.
+
+## Phase 6 — 2026-07-08
+
+### P6a — memory ids: `m<n>` = one past the highest current numeric id; reuse accepted
+Chosen: `state._next_memory_id` scans the live memories for `m<number>` ids and returns `m{max+1}`. Ids are the visible handle the model passes to `forget`, so they must be stable while a fact lives; they need only be unique among facts present at once (so the model can name one in a single turn), NOT globally unique for all time.
+Accepted consequence: after the *highest* memory is forgotten, its id can later be reused by a new memory. Harmless at this scale (an old transcript referring to "m3" could ambiguously match a reused id, but the model only ever forgets ids it currently sees in context). Rejected: a persisted monotonic counter — more state/format complexity for a non-problem here. Documented as a limitation.
+
+### P6b — memories are a single shared store, NOT keyed by DOIT_SESSION
+Chosen: `memories.json` is one flat list under `~/.doit/`, unlike `sessions/<id>.jsonl`. A fact stated in one terminal ("this is my project folder") must be visible in every terminal — cross-session persistence is the whole point of memory. So `context.memory_block` sits with the ambient S/U setup above the per-session history `ForEach(@t)`, not inside it. (Contrast D10/cross-session *history* awareness, Phase 8, which IS session-scoped.)
+
+### P6c — a memory op is a within-turn step, like ask_user (not a command step)
+Chosen: `remember`/`forget` re-enter the `run_turn` loop (`controller._handle_memory` applies the change, feeds the result back, `continue`), so they do NOT consume `max_steps`. This makes the dual-trigger case work in single-command mode: the model calls `remember` first, then the one terminal `run_command` (the prompt instructs "remember FIRST, then run the command"). Verified offline (`test_loop_remember_then_run_command`): `mkdir ~/proj` still runs after the store, sequence `["remember","run_command"]`.
+Loop-guard headroom: added `MAX_MEMORY_OPS = 3` to the `run_turn` iteration bound so a legitimate `forget`+`remember`+command sequence isn't truncated. Unlike `MAX_CLARIFICATIONS` this is NOT an anti-annoyance behavioural cap (memory ops don't pester the user) — purely a ceiling on non-convergent loops.
+Rejected: raising `max_steps` to fit memory ops — would conflate "commands allowed" with "memory ops allowed" and could silently let single-command mode run two commands (same reasoning as P5a).
+
+### P6d — remember/forget steps are recorded in history but NOT replayed into context
+Chosen: `_handle_memory` records `{tool:"remember"/"forget", ...}` in the session JSONL (audit trail / report evidence), but `context._replay_turn` does not render them back into the message list — it only handles `run_command` and `ask_user` steps, so memory steps fall through and are dropped from replay. This is deliberate: the always-injected `memory_block` (D9a) already carries the *current* memory state authoritatively, so replaying "you remembered X three turns ago" would be redundant and could even conflict with a since-edited fact. The store is the source of truth, not the transcript.
+
+### P6e — bug: unanswered parallel tool_calls crashed memory edits, deleted memories
+Observed: gpt-4o-mini bundled `forget`+`remember` as 2 tool_calls in one message on every logged edit (5/5). `_call_native` acted on only the first but replayed the whole message; the next call left the second tool_call unanswered, and OpenAI rejected it (400 — matched an orphaned id back to the exact log record). Because `forget` had already run before the crash, each retry deleted another memory (`[m1,m2]→[m1]→[]`).
+Considered (A) trim the replayed message to the one call we answer, vs (B) make the controller act on all tool_calls in one iteration. (B) is cheaper per call (proven: one bundled request already cost ~6.5KB of context; (A) pays that twice) but reshapes `Decision` into a list, touches `run_turn`'s dispatch and `max_steps`/safety-gate semantics, and breaks adapter interchangeability (prompted can never bundle).
+**Chosen: (A)**, for safety (one LPU call = one Decision, unchanged since P1b) and simplicity. Fix: `llm._dump_single_tool_call` drops sibling tool_calls before replay; the dropped action re-enters via the next loop iteration once the model sees updated state. Accepted cost: an extra LLM call (doubled context) on turns where the model bundles — small in absolute terms at this scale, recurring by design. (B) not implemented; noted as a possible future optimization, same status as D9's relevance filtering.
+
+### Phase 6 gate: CLOSED
+All live cases captured (logs/phase6/): 32/33 remember+recall, 35 crash-free edit (good_interaction_memo.txt), 36 cross-session recall, 37 dual-trigger, 38 anti-clutter (live_remaining_cases.txt), plus the retarget-with-2-memories bonus check — the pre-fix wrong-forget-target behavior did not reproduce once P6e's crash fix was in place. Case 34 partially captured; surfaced that `change_dir` doesn't exist yet, so "go to X" runs `cd` inside the subprocess with no effect on the parent shell — expected, not a Phase 6 defect, flagged for whichever phase builds `change_dir`. Offline suite 14/14.

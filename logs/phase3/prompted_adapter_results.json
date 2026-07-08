@@ -25,7 +25,7 @@
     {
       "case": "hallucinated_tool_rejected",
       "pass": true,
-      "detail": "missing or unknown tool name 'execute_shell'; expected one of ['answer', 'ask_user', 'run_command']"
+      "detail": "missing or unknown tool name 'execute_shell'; expected one of ['answer', 'ask_user', 'forget', 'remember', 'run_command']"
     },
     {
       "case": "non_object_args_rejected",

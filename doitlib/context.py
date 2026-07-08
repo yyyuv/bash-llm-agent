@@ -50,6 +50,27 @@ def user_request(request: str) -> str:
     return request
 
 
+def memory_block() -> str:
+    """sys.memories: every stored fact about the user, labeled with its id.
+
+    Decision 9, option (a): ALL memories are injected on EVERY turn — no
+    relevance filtering. At this scale (dozens of facts at most) the token
+    cost is negligible and nothing relevant is ever silently missing;
+    embedding-based top-k retrieval is described as future work / a possible
+    Phase 9 extension (DECISIONS.md D9). The visible [id]s are what let the
+    model forget or replace a specific fact when the user revises it.
+
+    Returns "" when there are no memories, so build_messages can skip the
+    block entirely rather than emit an empty labeled header.
+    """
+    memories = state.load_memories()
+    if not memories:
+        return ""
+    lines = "\n".join(f"- [{m['id']}] {m['text']}" for m in memories)
+    template = (PROMPTS_DIR / "memory_block.txt").read_text()
+    return template.format(memories=lines)
+
+
 def history_messages(session_id: str) -> list:
     """ForEach(@t in last K turns): prior turns replayed as chat messages.
 
@@ -117,15 +138,18 @@ def _replay_turn(turn: dict) -> list:
 def build_messages(request: str, config: Config, session_id: str) -> list:
     """Assemble the full message list for the first LPU call of a turn.
 
-    Order: system instructions -> current environment -> replayed history
-    (last K turns) -> the current request. History sits between the
-    ambient setup and the new request so a reference in the request
-    resolves against the turns just above it.
+    Order: system instructions -> current environment -> persistent memory
+    -> replayed history (last K turns) -> the current request. Memory sits
+    with the ambient setup (it is context that holds for every turn, not
+    tied to any one turn); history and then the request follow, so a
+    reference in the request resolves against the turns just above it.
     """
     messages = [
         {"role": "system", "content": agent_instructions()},
         {"role": "user", "content": environment_block(config)},
     ]
+    if memory := memory_block():
+        messages.append({"role": "user", "content": memory})
     messages.extend(history_messages(session_id))
     messages.append({"role": "user", "content": user_request(request)})
     return messages

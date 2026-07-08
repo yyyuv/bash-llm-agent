@@ -6,6 +6,8 @@ codes against (PLAN.md §1). The tools grow by phase:
     run_command  execute one shell command                        (Phase 1)
     answer       reply in plain text; also the signal that ends the loop
     ask_user     ask one clarifying question, resolved in-loop     (Phase 5)
+    remember     save a durable fact about the user/environment    (Phase 6)
+    forget       delete a stored fact by its id                    (Phase 6)
 
 Schemas use the OpenAI function-calling format, which LiteLLM accepts
 for every provider.
@@ -116,6 +118,57 @@ TOOL_SCHEMAS = [
                     },
                 },
                 "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remember",
+            "description": (
+                "Save a durable fact or preference about the user or their "
+                "environment so future doit runs can use it (e.g. 'my project "
+                "folder is ~/school/llms/ass3', 'the user prefers ls sorted "
+                "by size', 'always use eza instead of ls'). Use ONLY for "
+                "stable facts worth keeping across sessions — never for "
+                "transient details of the current request. This does not end "
+                "the turn: you can also run a command or answer in the same "
+                "turn."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fact": {
+                        "type": "string",
+                        "description": (
+                            "The fact to store, phrased so it still makes "
+                            "sense on its own in a later, unrelated turn."
+                        ),
+                    },
+                },
+                "required": ["fact"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "forget",
+            "description": (
+                "Delete one stored memory by its id (the [id] shown in the "
+                "known-facts block). Use this to remove a fact, or — together "
+                "with remember — to change a fact the user has revised: "
+                "forget the old id, then remember the new version."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "The id of the memory to delete, e.g. 'm3'.",
+                    },
+                },
+                "required": ["id"],
             },
         },
     },

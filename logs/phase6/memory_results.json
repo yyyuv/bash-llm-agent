@@ -1,0 +1,76 @@
+{
+  "passed": 14,
+  "total": 14,
+  "results": [
+    {
+      "case": "tools_in_schema",
+      "pass": true,
+      "detail": "names=['answer', 'ask_user', 'forget', 'remember', 'run_command']"
+    },
+    {
+      "case": "add_and_load",
+      "pass": true,
+      "detail": "ids=['m1', 'm2']"
+    },
+    {
+      "case": "ids_increment",
+      "pass": true,
+      "detail": "id=m3"
+    },
+    {
+      "case": "forget_removes",
+      "pass": true,
+      "detail": "remaining=['m2']"
+    },
+    {
+      "case": "missing_malformed_empty",
+      "pass": true,
+      "detail": "missing=[] malformed=[]"
+    },
+    {
+      "case": "block_empty",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "block_lists",
+      "pass": true,
+      "detail": "block='Known facts about the user (persistent memory \u2014 use them to interpret\\nrequests; each has an [id] you can pass to forget):\\n- [m1] project folder is ~/ass3\\n- [m2] prefer ls by size\\n'"
+    },
+    {
+      "case": "build_injects_block",
+      "pass": true,
+      "detail": "lens=3->4"
+    },
+    {
+      "case": "handle_remember",
+      "pass": true,
+      "detail": "obs='Stored as memory m1: prefer eza'"
+    },
+    {
+      "case": "handle_remember_empty",
+      "pass": true,
+      "detail": "obs='Nothing to remember: the fact was empty.'"
+    },
+    {
+      "case": "handle_forget_missing",
+      "pass": true,
+      "detail": "obs='There is no memory with id m7 to forget.'"
+    },
+    {
+      "case": "remember_then_answer",
+      "pass": true,
+      "detail": "seq=['remember'] stored=['my project folder is ~/ass3']"
+    },
+    {
+      "case": "remember_then_command",
+      "pass": true,
+      "detail": "seq=['remember', 'run_command'] cmd='mkdir ~/proj'"
+    },
+    {
+      "case": "edit_forget_then_remember",
+      "pass": true,
+      "detail": "seq=['forget', 'remember'] stored=['ask each time which sort order to use']"
+    }
+  ]
+}

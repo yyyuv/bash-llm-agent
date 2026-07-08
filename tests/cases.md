@@ -115,9 +115,18 @@ save transcripts to `logs/phase5/`.
 <!-- //TODO Phase 5 live capture (gate not closed until these are run + saved):
      [x] case 23 decline path        -> logs/phase5/live_clarify_gpt4omini.txt
      [ ] case 24 stacked-safety (Yes -> run_command -> y/N gate)  <- highest value
-     [ ] cases 25/26 no-answer default + Ctrl-C abort
-     [ ] cases 27/28 two-question cap + anti-annoyance (don't-ask)
-     [ ] cases 29-31 how-do-I -> modify it -> execute it chain
+     [x] case 25 no-answer default (stated default, still gated) -> logs/phase5/live_default_and_no_ask.txt
+         (also: logs/phase5/live_default_no_statable_default.txt -- open-ended Q with
+          no statable default, re-asks instead of guessing; keep as bonus content)
+     [ ] case 26 Ctrl-C abort
+     [ ] case 27 two-question cap (not yet forced -- case above only needed 1 question)
+     [x] case 28 anti-annoyance (don't-ask on unambiguous request) -> logs/phase5/live_default_and_no_ask.txt
+     [x] cases 29-31 how-do-I -> modify it -> execute it chain
+         found + fixed bug: identical repeat of a "how do I" question
+         executed instead of answering (history bleed). See DECISIONS.md
+         P5e: logs/phase5/live_richer_interactions_history_bleed.txt (bug),
+         live_richer_interactions_retest_after_prompt_fix.txt (1st fix
+         failed), live_richer_interactions_fixed.txt (2nd fix, confirmed).
      [ ] re-run 5a/5b on a 2nd (local Ollama) model for the comparison -->
 
 
@@ -142,3 +151,31 @@ save transcripts to `logs/phase5/`.
 
 Run 5a/5b on **≥2 models**; the weak local model over-asking (`ask_user` when
 it should assume) or failing #31 is exactly the model-comparison content.
+
+## Phase 6 (memory) — LIVE
+
+Offline: `tests/memory_tests.py` (14/14 — store/load/forget, id generation,
+malformed file, memory_block, `_handle_memory`, and run_turn integration for
+remember→answer, remember→command, and forget+remember edit). **Live
+(required for the gate)** — save transcripts to `logs/phase6/`. Memory is a
+single shared store, so run the recall/edit chain in the SAME session (any
+`DOIT_SESSION`); cross-session recall (case 36) uses a *different* session to
+prove memory is not session-scoped (P6b). Inspect `~/.doit/memories.json`
+between steps to show state.
+
+| # | invocation | expected behavior |
+|---|---|---|
+| 32 | `doit "remember that ~/school/llms/ass3 is my project folder"` | `remember` stores the fact; `answer` confirms; `memories.json` gains `[m1]` | captured: behavior_issue.txt |
+| 33 | `doit "what's my project folder?"` | `answer` recalls it from the injected memory block — nothing runs | captured: behavior_issue.txt |
+| 34 | `doit "go to my project folder and list it"` (or, until change_dir lands, `doit "list my project folder"`) | resolves "my project folder" from memory → `run_command` on `~/school/llms/ass3` | partially captured — surfaced the cd-trap (no change_dir tool yet); see good_interaction_memo.txt |
+| 36 | different `DOIT_SESSION`: `doit "what's my favourite folder?"` | recalls a fact set in a DIFFERENT session — proves memory isn't session-scoped (P6b) | captured: live_remaining_cases.txt |
+| 38 | `doit "I'm looking for a file I saved yesterday"` | does NOT call `remember` — transient detail, `memories.json` unchanged | captured: live_remaining_cases.txt |
+| bonus | edit with 2+ memories present: `doit "I changed my mind about the sort order — ask me each time instead"` | forgets the CORRECT id, unrelated memory untouched (retests the pre-P6e wrong-forget-target bug) | captured: live_remaining_cases.txt — correct target, bug did not reproduce |
+| 35 | `doit "remember I prefer ls sorted by size"` then `doit "I changed my mind — ask me each time instead"` | edit path: turn 2 does `forget(m2)` + `remember("ask each time ...")`; old fact gone, new one present |
+| 36 | in a **different** terminal/`DOIT_SESSION`: `doit "what's my project folder?"` | still recalls `[m1]` — proves memory is cross-session, not per-session (P6b) |
+| 37 | dual-trigger: `doit "make a folder called notes and remember it's where I keep notes"` | `remember` FIRST, then `run_command mkdir notes` (destructive `y/N` gate still applies); both happen in one turn (P6c) |
+| 38 | `doit "tell me a file from yesterday"` / transient chatter | does NOT call `remember` — only durable facts are stored (anti-clutter policy) |
+
+Run on **≥2 models**; watch for the weak local model over-remembering
+(storing transient junk), failing to lift the id for `forget` when editing
+(case 35), or forgetting to remember *before* the command (case 37).

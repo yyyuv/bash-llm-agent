@@ -1,0 +1,26 @@
+Phase 5 gate evidence — live transcript (cases 29-31, history bleed bug)
+Model: openai/gpt-4o-mini (native adapter)   Session: DOIT_SESSION=p5case29   Date: 2026-07-08
+
+Bug: repeating the exact case-29 question verbatim in turn 3 executed the
+command instead of answering. See DECISIONS.md P5e for analysis + fix attempt.
+
+--------------------------------------------------------------------------------
+$ doit "how do i find python files modified this week?"
+You can find Python files modified this week by using the `find` command with
+the `-name` option to specify the file type and the `-mtime` option to filter
+by modification time. Here's the command you can run:
+find . -name "*.py" -mtime -7
+$ doit "modify it to also show file sizes"
+$ find . -name "*.py" -mtime -7 -exec ls -lh {} \;
+[... file listing ...]
+$ doit "how do i find python files modified this week?"
+$ find . -name "*.py" -mtime -7 -exec ls -lh {} \;
+[... file listing again — SHOULD have been answer, not run_command ...]
+$ doit "dont run the command yourself"
+[answer: gives the recipe back as text, correctly not executing]
+$ doit "add the command modification to also show file sizes"
+[answer: repeats the recipe text]
+$ doit "make the command without showing file sizes"
+$ find . -name "*.py" -mtime -7
+[... file listing ...]
+--------------------------------------------------------------------------------

@@ -1,0 +1,120 @@
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % set -a; source .env; set +a
+
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % export DOIT_SESSION=mem2
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "remember I prefer ls sorted by size"
+
+· remembered [m1]: the user prefers ls sorted by size
+I've noted that you prefer `ls` sorted by size.
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "tell me a joke"                                   
+I'm a shell command agent and can't tell jokes, but I'm here to help you with commands and tasks!
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "what files are in my folder?"       
+$ ls -S
+PLAN_DETAILED.md
+DECISIONS.md
+PLAN.md
+CLAUDE.md
+doit
+doitlib
+logs
+acdl
+sessions
+tests
+prompts
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % with their size
+zsh: command not found: with
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "with their size"
+$ ls -lS
+total 264
+-rw-r--r--@  1 yuvalreuveni  staff  45198 Jul  8 14:52 PLAN_DETAILED.md
+-rw-r--r--@  1 yuvalreuveni  staff  40784 Jul  8 14:52 DECISIONS.md
+-rw-r--r--@  1 yuvalreuveni  staff  17995 Jul  7 18:15 PLAN.md
+-rw-r--r--@  1 yuvalreuveni  staff  16830 Jul  8 13:39 CLAUDE.md
+-rwxr-xr-x@  1 yuvalreuveni  staff   1319 Jul  7 15:00 doit
+drwxr-xr-x@ 11 yuvalreuveni  staff    352 Jul  8 14:50 doitlib
+drwxr-xr-x@  9 yuvalreuveni  staff    288 Jul  8 13:37 logs
+drwxr-xr-x@  8 yuvalreuveni  staff    256 Jul  8 13:36 acdl
+drwxr-xr-x@  8 yuvalreuveni  staff    256 Jul  7 17:45 sessions
+drwxr-xr-x@  8 yuvalreuveni  staff    256 Jul  8 13:39 tests
+drwxr-xr-x@  7 yuvalreuveni  staff    224 Jul  8 13:35 prompts
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "my favourite folder is /logs"
+· remembered [m2]: the user's favourite folder is /logs
+$ ls -lS logs
+total 8
+-rw-r--r--@ 1 yuvalreuveni  staff  1430 Jul  7 16:30 env_path_incident_2026-07-07.md
+drwxr-xr-x@ 8 yuvalreuveni  staff   256 Jul  7 16:13 phase2
+drwxr-xr-x@ 8 yuvalreuveni  staff   256 Jul  7 17:34 phase3
+drwxr-xr-x@ 5 yuvalreuveni  staff   160 Jul  7 15:10 phase1
+drwxr-xr-x@ 5 yuvalreuveni  staff   160 Jul  7 19:12 phase4
+drwxr-xr-x@ 4 yuvalreuveni  staff   128 Jul  7 19:39 phase5
+drwxr-xr-x@ 4 yuvalreuveni  staff   128 Jul  8 13:49 phase6
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % cat ~/.doit/memories.json  
+[
+  {
+    "id": "m1",
+    "ts": 1783511673.7100658,
+    "text": "the user prefers ls sorted by size"
+  },
+  {
+    "id": "m2",
+    "ts": 1783511782.714396,
+    "text": "the user's favourite folder is /logs"
+  }
+]%                                                                                                                                                                                            
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "go to my favourite folder"
+$ cd /logs
+zsh:cd:1: no such file or directory: /logs
+doit: command exited with code 1
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % cat ~/.doit/memories.json       
+[
+  {
+    "id": "m1",
+    "ts": 1783511673.7100658,
+    "text": "the user prefers ls sorted by size"
+  },
+  {
+    "id": "m2",
+    "ts": 1783511782.714396,
+    "text": "the user's favourite folder is /logs"
+  }
+]%                                                                                                                                                                                            
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "where am i now?"
+$ pwd
+/Users/yuvalreuveni/Documents/Claude/Projects/assingment3/bash-llm-agent
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "go to my favourite folder"
+$ cd /Users/yuvalreuveni/Documents/Claude/Projects/assingment3/bash-llm-agent/logs
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % cat ~/.doit/memories.json       
+[
+  {
+    "id": "m1",
+    "ts": 1783511673.7100658,
+    "text": "the user prefers ls sorted by size"
+  },
+  {
+    "id": "m2",
+    "ts": 1783511782.714396,
+    "text": "the user's favourite folder is /logs"
+  }
+]%                                                                                                                                                                                            
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "my favourite folder was changed to /prompts
+dquote>                            
+dquote> q
+dquote> quit
+dquote> 
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "my favourite folder was changed to /prompts"
+· forgot m2
+· remembered [m2]: the user's favourite folder is /prompts
+$ cd /Users/yuvalreuveni/Documents/Claude/Projects/assingment3/bash-llm-agent/prompts
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % cat ~/.doit/memories.json                         
+[
+  {
+    "id": "m1",
+    "ts": 1783511673.7100658,
+    "text": "the user prefers ls sorted by size"
+  },
+  {
+    "id": "m2",
+    "ts": 1783512008.4397461,
+    "text": "the user's favourite folder is /prompts"
+  }
+]%                                                                                                                                                                                            
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % 

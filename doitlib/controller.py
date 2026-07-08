@@ -19,6 +19,13 @@ and re-calls the model — all inside the same turn. A clarification is NOT
 a command step: it doesn't count against max_steps. To keep doit from
 nagging, at most MAX_CLARIFICATIONS questions are asked per turn; past
 that the model is told to proceed with its best assumption (Section 6).
+
+Phase 6 adds the `remember`/`forget` tools. Like ask_user, a memory op is
+a within-turn step, not a command step: it applies the change to the
+shared memory store, feeds the result back, and the loop continues — so
+the model can store a fact AND run a command (or answer) in one turn (the
+"move here, and this is my project folder" case). Editing a fact is a
+forget followed by a remember across two steps.
 """
 
 import os
@@ -33,6 +40,12 @@ from .config import Config, resolve_shell
 # prompt — beyond it the model is forced to act on its best interpretation.
 MAX_CLARIFICATIONS = 2
 
+# Loop-guard headroom for memory ops (Phase 6). Memory ops are NOT capped
+# behaviourally the way clarifications are (they don't pester the user), but
+# the loop guard needs slack so a legitimate forget + remember + command
+# sequence isn't truncated. This is a ceiling on iterations, not a policy.
+MAX_MEMORY_OPS = 3
+
 
 def run_turn(request: str, config: Config) -> None:
     """Handle one user request end to end, printing output as we go."""
@@ -43,9 +56,10 @@ def run_turn(request: str, config: Config) -> None:
     clarifications = 0
     command_steps = 0
 
-    # Loop guard: max_steps command steps + the clarification budget + a little
-    # slack, so a model that never converges still terminates cleanly.
-    for _ in range(config.max_steps + MAX_CLARIFICATIONS + 1):
+    # Loop guard: max_steps command steps + the clarification and memory-op
+    # budgets + a little slack, so a model that never converges still
+    # terminates cleanly.
+    for _ in range(config.max_steps + MAX_CLARIFICATIONS + MAX_MEMORY_OPS + 1):
         decision = llm.call(messages, tools.TOOL_SCHEMAS, config, session_id)
 
         if decision.tool_name == "answer":
@@ -59,6 +73,11 @@ def run_turn(request: str, config: Config) -> None:
                 final_answer = aborted
                 break
             clarifications += 1
+            _append_tool_result(messages, decision, observation)
+            continue
+
+        if decision.tool_name in ("remember", "forget"):
+            observation = _handle_memory(decision.tool_name, decision.args, steps)
             _append_tool_result(messages, decision, observation)
             continue
 
@@ -181,6 +200,38 @@ def _handle_ask_user(args: dict, clarifications: int, steps: list) -> tuple:
             None,
         )
     return f"The user answered: {reply}", None
+
+
+def _handle_memory(tool_name: str, args: dict, steps: list) -> str:
+    """Apply one remember/forget decision and report the result to the model.
+
+    A memory op is a within-turn step (like ask_user): it does not consume
+    a command step and the loop continues, so the model can store a fact
+    AND run a command or answer in the same turn. The observation returned
+    here is fed back to the LPU as the tool result; the step is recorded in
+    session history for the report/audit trail.
+    """
+    if tool_name == "remember":
+        fact = args.get("fact", "").strip()
+        if not fact:
+            steps.append({"tool": "remember", "args": args, "error": "empty fact"})
+            return "Nothing to remember: the fact was empty."
+        record = state.add_memory(fact)
+        print(f"· remembered [{record['id']}]: {fact}", file=sys.stderr)
+        steps.append({"tool": "remember", "args": args, "memory_id": record["id"]})
+        return f"Stored as memory {record['id']}: {fact}"
+
+    # forget
+    memory_id = args.get("id", "")
+    removed = state.forget_memory(memory_id)
+    print(
+        f"· forgot {memory_id}" if removed else f"· no memory {memory_id} to forget",
+        file=sys.stderr,
+    )
+    steps.append({"tool": "forget", "args": args, "removed": removed})
+    if removed:
+        return f"Forgot memory {memory_id}."
+    return f"There is no memory with id {memory_id} to forget."
 
 
 def _prompt_user(question: str, options: list) -> str:
