@@ -521,7 +521,19 @@ Plan: 1) find the 3 largest .log files under ~/projects
 
 3. **Project profiles** — a `.doit.md` file per project directory (the agent.md idea from the assignment's own examples): "this is a python project; venv is ./venv; never touch data/raw". When cwd is inside the project, the file is auto-injected into context. Cheap to describe richly.
 
-🔶 **DECISION 11 — which to implement.** Recommendation is #1, but if the multi-step loop feels risky with the local models (valid concern — 8B models are weakest exactly at multi-step), #3 is the lowest-risk high-value alternative. Decide after Phase 3, when you've seen the local models' competence firsthand.
+🔶 **DECISION 11 — which to implement. → RESOLVED (2026-07-08, after a five-candidate re-brainstorm post-Phase-8): #1 multi-step plans, with self-correcting retry folded in; fallback to retry-alone if plans prove too hard.**
+
+**Why (the felt need, not a theoretical pick):** Phase 8's live window-2 case — `doit "create a folder for each year from 2020 to 2026"` — silently completed **1/7** of the task in single-command mode: the model ran `mkdir 2020` and the turn ended, with no error and no hint that 2021–2026 never happened. It only worked after re-phrasing "in one command" (forcing `mkdir {2020..2026}`). Silent partial completion is the worst failure mode a step cap can produce — worse than an error — and a user shouldn't need to know shell brace-expansion phrasing tricks to be safe from it. Meanwhile `read_session` (Phase 8) already proved a two-step flow live (fetch → act, same turn): the loop was begging to be multi-step.
+
+**The re-brainstormed candidate set** (five, not the original three): #1 multi-step plans, #2 self-correcting retry (on `rc≠0`, feed stderr back, allow ONE corrective attempt), #3 undo journal (`doit "undo that"` — record inverse commands for invertible destructive actions, refuse honestly otherwise), #4 dry-run preview (destructive commands first run a read-only variant showing the blast radius before the `y/N` gate), #5 project profiles. Compaction dropped (efficiency plumbing, weakest "capability" story). **Report trio: #1+#2 (implemented as one extension), #3 and #4 (described).**
+
+**Design:** an opt-in `plan(steps[])` tool, NOT a global `max_steps` bump — the default stays single-command (trivial requests keep costing one LPU call), and a plan raises only *this turn's* command budget to `len(steps)+slack`. Per-step destructive `y/N` gates are retained (the printed plan is a *preview*, not a blanket authorization). Retry is always-on for every model: one corrective attempt per failed command, destructive retries re-gated.
+
+**Model policy — gate on capability, not adapter:** `enable_plans` in `doit.cfg` per model: ON for `gpt-4o-mini`, OFF for the 4B locals — *whether native (qwen3) or prompted (gemma3)*. Hardwiring "prompted → no plans" was considered and rejected: it would violate the adapter-interchangeability principle (the controller must never know which adapter ran) and miss the weak-*native* case entirely. Weak models still get retry — a single corrective step squarely within their competence, over the same JSON path Phase 3 already proved. Deliberately force plans ON for one weak-model run and keep the failure transcript — required model-comparison content.
+
+**Cons, owned upfront** (report's limitations section, not footnotes): cost/latency multiply by step count; context grows per step and truncation can starve later steps of details they needed; a misread early output compounds through the chain; **half-executed plans are a genuinely NEW failure mode** — a declined or failed middle step leaves partial filesystem state that single-command mode structurally could not create; the announced plan is not binding (the model may deviate from what the user just confirmed); weak models will produce incoherent sequences.
+
+**Fallback trigger (concrete, not vibes):** if after prompt hardening `gpt-4o-mini` cannot pass BOTH showcase cases — the multi-step chain and the recovery-stop ("step 1 found nothing → report, don't plow on") — ship #2 retry alone as the extension and demote #1 to described-only. Timeboxed.
 
 ---
 
@@ -546,8 +558,8 @@ Not elaborated here — PLAN.md §5–6 covers the skeleton. The three rules tha
 | 5 | Safety mechanism | in-band flag+guard / separate call / static only | ✅ (a) start; add judge call if flag proves unreliable |
 | 6 | Prompted format | JSON / tags | ✅ (a) JSON |
 | — | Chit-chat policy | comply / polite refusal | ✅ polite in-role refusal ("I'm a shell command agent") |
-| 7 | Output in history | truncated / metadata / adaptive | ⏸ deferred — discuss before Phase 4 |
+| 7 | Output in history | truncated / metadata / adaptive | ✅ (d) adaptive tiered truncation — hot budget for current turn, cold for replayed history (Phase 4, DECISIONS.md D7) |
 | 8 | Unanswered clarification | default / abort / timeout | ✅ (a) empty input → stated default, with destructive→abort / read-only→default split; no timeout |
-| 9 | Memory injection | all / filtered | ⏸ deferred |
-| 10 | Cross-session | summaries / fetch tool / both | ⏸ deferred |
-| 11 | Extension | multi-step / compaction / profiles | ⏸ deferred (after Phase 3 anyway) |
+| 9 | Memory injection | all / filtered | ✅ (a) inject ALL memories every turn; embedding top-k documented as future work (Phase 6, DECISIONS.md D9) |
+| 10 | Cross-session | summaries / fetch tool / both | ✅ (c) both — always-injected one-line summaries + `read_session(id)` fetch tool (Phase 8, DECISIONS.md D10) |
+| 11 | Extension | multi-step / compaction / profiles | ✅ #1 multi-step plans + self-correcting retry folded in; fallback to retry-alone; plans config-gated per model (`enable_plans`), retry always-on (2026-07-08, DECISIONS.md D11) |

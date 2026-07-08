@@ -36,7 +36,9 @@ Phase 8 adds **multi-tasking / cross-session awareness** (PLAN_DETAILED Section 
 
 **Phase 8 gate: CLOSED.** The assignment's exact two-window scenario passed live on `openai/gpt-4o-mini` — [logs/phase8/live_two_window_gpt4omini.txt](logs/phase8/live_two_window_gpt4omini.txt) (genuine session files preserved at `~/.doit/sessions/p8win1.jsonl` + `p8win2.jsonl`): (48) window 1 `"now sort them by date"` → `ls -t` on window 1's OWN files, not window 2's more-recently-created year folders (implicit stays local); (49) window 1 `"redo here the exact same folder task I did in the other terminal window"` → `read_session("p8win2")` fired and the model reproduced window 2's `mkdir {2020..2026}` (explicit reaches across). Note surfaced: in single-command mode window 2's year task needed a phrasing nudge to emit one multi-arg `mkdir` — the multi-step artifact the Phase 9 extension #1 would remove; not a Phase 8 issue. TODO: run cases 48/49 on a local Ollama model too for the model-comparison chapter.
 
-**Next:** Phase 9 (extension — Decision 11, deferred; describe three, implement one) then Phase 10 (report). **Phase 9 remains ⏸-gated** — the extension choice is still open; re-review before starting.
+**Phase 9 scope DECIDED (D11, 2026-07-08 — gate lifted after joint review):** implement **multi-step command plans with self-correcting retry folded in**; fallback to retry-alone if plans fail the concrete trigger (gpt-4o-mini can't pass both showcase cases after timeboxed hardening). Chosen because we felt the need live — Phase 8's `mkdir 2020` silent-partial-completion case. Design locked: opt-in `plan(steps[])` tool (no global `max_steps` bump; default stays single-command), per-step destructive `y/N` gates retained, retry = one corrective attempt on `rc≠0` (always on, all models); plans capability-gated by `enable_plans` in `doit.cfg` per MODEL (on for gpt-4o-mini, off for both 4B locals — gate on capability, NOT adapter, preserving adapter-interchangeability). Report trio: plans+retry (implemented), undo journal + dry-run preview (described). Full rationale, cons, and the rejected "prompted → no plans" hardwiring: DECISIONS.md D11; PLAN.md Phase 9; PLAN_DETAILED.md Section 11 + checklist row 11.
+
+**Next:** implement Phase 9 per D11 (plan tool + retry + config gating + acdl/v9 + offline suite + live cases incl. one forced weak-model plan-failure transcript), then Phase 10 (report — user-written).
 
 <!-- //TODO close Phase 5 gate — live transcripts still owed (checklist in tests/cases.md):
      case 23 decline path is DONE (logs/phase5/live_clarify_gpt4omini.txt).
@@ -111,7 +113,7 @@ report/
 
 ## Build order
 
-Follow the phased order in [PLAN.md](PLAN.md) §2 (Phase 0 skeleton → Phase 9 extension → Phase 10 report). **Decisions are locked only through Phase 3; Phases 4–9 need joint review before starting** (see the ⏸ scope note in PLAN.md). Each phase is a phase gate: it is not "done" without its `.acdl` spec and 2–3 logged test interactions committed. **The Phase 9 extension choice (Decision 11) is deferred — do not assume one; it will be decided after Phase 3.**
+Follow the phased order in [PLAN.md](PLAN.md) §2 (Phase 0 skeleton → Phase 9 extension → Phase 10 report). Each phase is a phase gate: it is not "done" without its `.acdl` spec and 2–3 logged test interactions committed. All scope gates through Phase 9 have now been jointly reviewed and lifted; **the Phase 9 extension choice (Decision 11) is RESOLVED** — multi-step plans + self-correcting retry, fallback retry-alone (see DECISIONS.md D11).
 
 ## Workflow rules
 
