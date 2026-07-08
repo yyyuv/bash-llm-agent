@@ -2,35 +2,14 @@
 // Same single-decision turn as v1, but a run_command decision now passes
 // through a deterministic safety gate before anything executes.
 
-DoitAgentV2[@T.I]: {
+DoitAgentSafety[@T.I]: {
   S: {
     AGENT_INSTRUCTIONS
+    SAFTY_INSTRUCTIONS // Regex-based safety gate, confirm prompt
     AVAILABLE_TOOLS(run_command, answer)
   }
   U: {
     ENV_INFO(env.cwd[@T], env.datetime[@T], env.shell[@T], env.os[@T])
   }
   U: env.user_request[@T]
-
-  A: resp.tool_call[@T.I]
-  
-  If resp.tool_call[@T.I] == run_command {
-    If resp.safety_check[@T.I].is_sudo {
-      T: resp.blocked[@T.I]
-    }
-    ElseIf resp.safety_check[@T.I].is_interactive {
-      T: resp.blocked[@T.I]
-    }
-    ElseIf resp.safety_check[@T.I].is_destructive {
-      If resp.confirmed[@T.I] {
-        T: resp.tool_response[@T.I]
-      }
-      Else {
-        T: resp.blocked[@T.I]
-      }
-    }
-    Else {
-      T: resp.tool_response[@T.I]
-    }
-  }
 }

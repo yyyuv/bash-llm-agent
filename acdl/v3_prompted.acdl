@@ -2,10 +2,11 @@
 // Same agent, same tools, same safety gate as v2 — only the plumbing to
 // the LPU differs, for local models without tool-calling.
 
-DoitAgentV3Prompted[@T.I]: {
+DoitAgentPrompted[@T.I]: {
   //This agents assumes no inherent tool use capabilities
   S: {
     AGENT_INSTRUCTIONS
+    SAFTY_INSTRUCTIONS
     AVAILABLE_TOOLS_TEXT
     JSON_PROTOCOL_INSTRUCTIONS
   }

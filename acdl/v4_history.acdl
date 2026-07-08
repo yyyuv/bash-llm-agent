@@ -1,6 +1,7 @@
-DoitAgentV4History[@T.I]: {
+DoitAgentHistory[@T.I]: {
   S: {
     AGENT_INSTRUCTIONS
+    SAFTY_INSTRUCTIONS
     AVAILABLE_TOOLS(run_command, answer)
   }
   U: {

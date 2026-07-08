@@ -2,7 +2,7 @@
 // One turn, one LPU decision (max_steps = 1): the LPU either issues one
 // run_command or one answer. No history, memory, or safety branch yet.
 
-DoitAgentV1[@T.I]: {
+DoitAgentSingleCommand[@T.I]: {
   S: {
     AGENT_INSTRUCTIONS
     AVAILABLE_TOOLS(run_command, answer)
@@ -11,6 +11,4 @@ DoitAgentV1[@T.I]: {
     ENV_INFO(env.cwd[@T], env.datetime[@T], env.shell[@T], env.os[@T])
   }
   U: env.user_request[@T]
-  
-  A: resp.tool_call[@T.I]
-}
+  }

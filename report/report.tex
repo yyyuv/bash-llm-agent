@@ -130,74 +130,7 @@
     {\large\color{secondary} July 2026 \par}
 \end{titlepage}
 
-\newpage
-\tableofcontents
-\newpage
 
-% SECTION 1: INTRODUCTION & OVERVIEW
-\section{Introduction \& System Overview}
-\label{sec:intro}
-This report documents our design and implementation of the \texttt{doit} agentic shell, a command-line utility that translates natural language instructions into shell commands and executes them on behalf of the user. 
-
-Following the core architecture of LLM systems, we establish a strict boundary between the \textbf{Language Processing Unit (LPU)}—responsible solely for generating structured tool decisions from context—and the \textbf{Controller}—a deterministic Python runtime environment that manages state, enforces safety checks, and handles command execution.
-
-Rather than defining tools for specific commands (e.g., \texttt{ls} or \texttt{grep}), our agent uses a unified set of five universal tools: \texttt{run\_command}, \texttt{ask\_user}, \texttt{answer}, \texttt{remember}, and \texttt{change\_dir}. We structure this report to follow the exact sections defined in the assignment specifications, detailing the design decisions, implementation details, log evidence, and limitations encountered for each module.
-
-\subsection{Context Assembly and Code Mapping}
-\label{sec:context_mapping}
-Every block of context defined in our formal Agent Context Description Language (ACDL) schemas maps directly to a named Python function in the \texttt{doitlib/context.py} module:
-\begin{itemize}
-    \item \texttt{AGENT\_INSTRUCTIONS} $\longleftrightarrow$ \texttt{context.agent\_instructions()}
-    \item \texttt{env.cwd}, \dots $\longleftrightarrow$ \texttt{context.environment\_block()}
-    \item \texttt{env.history} $\longleftrightarrow$ \texttt{context.history\_messages()}
-\end{itemize}
-This precise mapping guarantees that the formal specifications reflect the actual runtime context injected into the LPU during each turn loop execution. Figure~\ref{fig:context_map} represents this context assembly process.
-
-\begin{figure}[htbp]
-    \centering
-    \begin{tikzpicture}[
-        node distance=0.8cm and 1.5cm,
-        block/.style={draw=primary, fill=background, rectangle, minimum width=6.5cm, align=left, font=\small, thick},
-        container/.style={draw=accent, dashed, rectangle, inner sep=10pt, thick}
-    ]
-        % System block
-        \node[block] (system) {
-            \textbf{System Instructions (S:)} \\
-            - \texttt{context.agent\_instructions()} \\
-            - Tool schemas (Native / Prompted text)
-        };
-        
-        % Environment block
-        \node[block, below=of system] (env) {
-            \textbf{Environment Block (U:)} \\
-            - CWD, active shell type, OS version \\
-            - Current date and time
-        };
-
-        % History block
-        \node[block, below=of env] (hist) {
-            \textbf{Replayed History turns (Last K=10) (U: / A:)} \\
-            - Past user requests and tool executions \\
-            - Cold-truncated outputs (Tiered Budgets)
-        };
-
-        % Current input
-        \node[block, below=of hist, fill=accent!10, draw=accent] (curr) {
-            \textbf{Current Request (U:)} \\
-            - \texttt{doit "now sort them by date"}
-        };
-        
-        % Fit container
-        \begin{scope}[on background layer]
-            \node[container, fit=(system) (env) (hist) (curr)] (ctx) {};
-            \node[above=0.1cm of ctx, font=\bfseries\color{accent}] {ACDL Prompt Context Assembly};
-        \end{scope}
-    \end{tikzpicture}
-    \caption{LPU input context block mapping.}
-    \label{fig:context_map}
-\end{figure}
-
-\newpage
 
 % SECTION 2: SINGLE COMMAND AT A TIME
 \section{Single command at a time.}
@@ -215,21 +148,12 @@ If the user's prompt represents a command, the LPU calls the \texttt{run\_comman
     \textbf{Problem:} When a user runs a Python script, it runs in a child subprocess. Any directory change (\texttt{cd}) executed by the script is lost when the script exits, returning the user to the original terminal directory.
     
     \textbf{Solution:} We resolved this by writing a dual-shell wrapper. The \texttt{change\_dir} tool verifies that the path exists and writes it to a temporary file: \texttt{\textasciitilde/.doit/cd\_target\_\$DOIT\_SESSION}. Upon \texttt{doit}'s termination, a shell function wrapper intercepts the exit, checks for the presence of this file, runs the native \texttt{cd} command inside the parent shell, and deletes the file.
-    
-    \textbf{Dual-Shell Snippet (Zsh / Bash):}
-    \begin{lstlisting}[language=bash]
-doit() {
-  command doit "$@"
-  local target=~/.doit/cd_target_$DOIT_SESSION
-  [ -f "$target" ] && cd "$(cat "$target")" && rm "$target"
-}
-    \end{lstlisting}
-\end{decisionbox}
+    \end{decisionbox}
 
 \begin{decisionbox}{Design Decision: Dual-Shell Variable Normalization}
     \textbf{Context:} Since different team members use different operating systems and shells (e.g., macOS/Zsh vs. Linux/Bash), command arguments and behavior can diverge.
     
-    \textbf{Solution:} We normalize shell interactions at the boundary. The Controller auto-detects the host shell via \texttt{\$SHELL} and includes the shell type and operating system (BSD vs. GNU) in the environment prompt block. The system prompt instructs the LPU to emit shell-agnostic commands or syntax tailored to the host environment.
+    \textbf{Solution:} The Controller auto-detects the host shell via \texttt{\$SHELL} and includes the shell type and operating system in the environment prompt block. The system prompt instructs the LPU to emit syntax tailored to the host environment.
 \end{decisionbox}
 
 \begin{decisionbox}{Design Decision: Primary API Model Selection}
@@ -256,6 +180,16 @@ Filesystem     Size   Used  Avail Capacity iused ifree %iused  Mounted on
 /dev/disk3s1   926Gi   17Gi  702Gi     3%    459k  4.3G    0%   /
 \end{lstlisting}
 
+\subsection{ACDL Context Specification: DoitAgentSingleCommand}
+The formal context structure representing the single command-at-a-time execution is detailed in the visual ACDL diagram below:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{acdl_v1.png}
+    \caption{Visual representation of the ACDL context for DoitAgentSingleCommand.}
+    \label{fig:acdl_v1}
+\end{figure}
+
 % SECTION 3: IDENTIFYING DANGEROUS COMMANDS
 \section{Identifying dangerous commands}
 \label{sec:safety}
@@ -271,7 +205,7 @@ Safety is handled through a double-layer verification policy (defense in depth):
 \subsection{Design Decisions}
 
 \begin{decisionbox}{Design Decision: In-Band Self-Report vs. Separate LLM Judge Call}
-    \textbf{Alternative Rejected:} We rejected using a separate LLM call to classify command destructiveness (as suggested in the assignment description). 
+    \textbf{Alternative Rejected:} We rejected using a separate LLM call to classify command destructiveness. 
     
     \textbf{Rationale:} A second LLM call doubles latency and API costs. Because the regex guard is required to handle safety deterministically anyway, we require the LPU to report destructiveness in the same JSON object as the command itself. The regex guard acts as the fallback mechanism. If the guard overrides the model's safety flag, the event is logged for analysis.
 \end{decisionbox}
@@ -299,21 +233,15 @@ doit: 'vim' opens an interactive program doit can't wait for. Run it yourself:
     vim
 \end{lstlisting}
 
-\subsection{ACDL Context Specification: DoitAgentV2}
+\subsection{ACDL Context Specification: DoitAgentSafety}
 The formal context structure representing the safety gate integration is detailed in the visual ACDL diagram below:
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.9\textwidth]{acdl_v2.png}
-    \caption{Visual representation of the ACDL context for DoitAgentV2 (Safety Gate).}
+    \caption{Visual representation of the ACDL context for DoitAgentSafety.}
     \label{fig:acdl_v2}
 \end{figure}
-
-\subsection{Limitations \& Imperfect Behavior}
-\begin{itemize}
-    \item \textbf{Interactive SSH False Negatives:} In \texttt{safety.py}, we identify interactive SSH sessions by checking if the command contains more than one non-flag token. A command such as \texttt{ssh -p 2222 host} is parsed as having multiple arguments and passes as non-interactive, hanging the subprocess execution when it drops into a terminal.
-    \item \textbf{Regex False Positives:} Commands such as \texttt{grep "rm -rf" notes.txt} contain write patterns inside text patterns. The regex guard overrides this as destructive, forcing a redundant \texttt{y/N} confirmation on a read-only command.
-\end{itemize}
 
 % SECTION 4: MODEL FLEXIBILITY
 \section{Model flexibility}
@@ -373,13 +301,13 @@ Sure, here is the command to view disk space:
 Parser Action: Strip fences, run brace scan -> extracted {"tool": "run_command", ...}
 \end{lstlisting}
 
-\subsection{ACDL Context Specification: DoitAgentV3Prompted}
+\subsection{ACDL Context Specification: DoitAgentPrompted}
 For models without native tool-calling, tool schemas move into the system prompt prose, and the raw text reply is parsed. The visual ACDL diagram below shows how we handle JSON validation and retries:
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.9\textwidth]{acdl_v3.png}
-    \caption{Visual representation of the ACDL context for DoitAgentV3Prompted (Prompted Adapter).}
+    \caption{Visual representation of the ACDL context for DoitAgentPrompted.}
     \label{fig:acdl_v3}
 \end{figure}
 
@@ -428,8 +356,15 @@ total 232
 -rw-r--r--@  1 yuval  staff  30675 Jul  7 18:57 DECISIONS.md
 \end{lstlisting}
 
-\subsection{Limitations \& Divergences}
-Under local instruction models (such as \texttt{gemma3:4b}), we observed a failure where the model parroted the same command (\texttt{ls -la | sort -k 5 -r}) across multiple turns instead of adjusting the sort arguments. This indicates that small local models struggle with context tracking and copy previous outputs rather than adjusting parameters.
+\subsection{ACDL Context Specification: DoitAgentHistory}
+The formal context structure representing the conversation history replay integration is detailed in the visual ACDL diagram below:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{acdl_v4.png}
+    \caption{Visual representation of the ACDL context for DoitAgentHistory.}
+    \label{fig:acdl_v4}
+\end{figure}
 
 % SECTION 6: CLARIFICATIONS
 \section{Clarifications}
@@ -455,22 +390,29 @@ To prevent the agent from asking questions repeatedly, we implement two controls
 \end{enumerate}
 
 \subsection{Example Interaction}
-\begin{lstlisting}[language=bash, caption={Clarification question menu and user choice.}]
-$ DOIT_SESSION=demo doit "delete the logs"
+Below is a live interaction showing how the clarification loop and safety confirmation gate stack together cleanly:
+
+\begin{lstlisting}[language=bash, caption={Stacked safety: clarification leading to a destructive confirmation gate.}]
+$ doit "delete the logs"
 Are you sure you want to delete the logs? This action cannot be undone.
   1. Yes
   2. No
-Your answer (number or text): 2
-The logs will not be deleted as per your request.
+Your answer (number or text): 1
+
+[WARNING] This command modifies the filesystem:
+    rm *.log
+  This command deletes log files in the current directory.
+Proceed? [y/N] y
+$ rm *.log
 \end{lstlisting}
 
-\subsection{ACDL Context Specification: DoitAgentV5Clarify}
+\subsection{ACDL Context Specification: DoitAgentClarify}
 The final formal context structure for our agent, representing both replayed turns and the within-turn clarification loop, is detailed in the visual ACDL diagram below:
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.9\textwidth]{acdl_v5.png}
-    \caption{Visual representation of the ACDL context for DoitAgentV5Clarify (Clarifications \& Multi-turn).}
+    \caption{Visual representation of the ACDL context for DoitAgentClarify \& Multi-turn).}
     \label{fig:acdl_v5}
 \end{figure}
 
@@ -500,27 +442,5 @@ $ find . -name "*.py" -mtime -7 -ls
 
 \subsection{Limitations}
 We observed that smaller local models (such as \texttt{gemma3:4b}) frequently fail on the third turn (``execute it''), responding with ``Execute what?'' or hallucinating unrelated commands. This indicates that tracking command references across multiple conversational turns is a capability limited to larger, instruction-tuned models.
-
-% SECTION 8: ENVIRONMENT FRICTION LOG
-\section{System Environment \& Friction Log}
-\label{sec:friction_log}
-Developing an agent that executes commands directly in a system shell exposes several environment-specific failure modes. We cataloged these incidents below:
-
-\begin{enumerate}
-    \item \textbf{Conda vs. System Python Conflicts:} The host machine had active Conda and system Python installations. Sourcing the Conda environment put Conda's Python interpreter first on the \texttt{PATH}, which did not have \texttt{litellm} installed. This caused a \texttt{ModuleNotFoundError} when calling \texttt{doit}. Sourcing \texttt{conda deactivate} resolved the conflict.
-    
-    \item \textbf{Shell Sourcing vs. Exporting:} Sourcing the \texttt{.env} file using \texttt{source .env} defined \texttt{OPENAI\_API\_KEY} as a local shell variable, but parent processes could not read it. Sourcing must explicitly export variables:
-    \begin{lstlisting}[language=bash]
-    set -a; source .env; set +a
-    \end{lstlisting}
-    
-    \item \textbf{PATH Corruption:} A manual edit in \texttt{\textasciitilde/.zshrc} corrupted the \texttt{PATH} syntax, resulting in a \texttt{zsh: command not found: doit} error. The PATH variable was restored to its clean declaration: \texttt{export PATH="\$HOME/.local/bin:\$PATH"}.
-\end{enumerate}
-
-% SECTION 9: CONCLUSION
-\section{Conclusion \& Limitations Summary}
-We successfully built the \texttt{doit} agentic shell in accordance with a clean Controller-LPU separation. The agent supports safety gates, native/prompted adapters, multi-turn history with tiered budgets, and within-turn clarification loops. 
-
-Our main open limitation is safety regex false positives (e.g. flagging \texttt{grep "rm -rf"} as destructive) and parsing interactive options (e.g. \texttt{ssh -p 2222}) where the regex check does not capture interactive states. However, the system is secure and successfully delegates complex execution logic to local and remote language models.
 
 \end{document}

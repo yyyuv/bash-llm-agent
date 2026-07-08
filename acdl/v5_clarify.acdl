@@ -35,9 +35,10 @@
 //   ask_user replayed in history     <-> context._replay_turn (asked / answered lines)
 //   everything else                  <-> unchanged from v4
 
-DoitAgentV5Clarify[@T.I]: {
+DoitAgentClarify[@T.I]: {
   S: {
     AGENT_INSTRUCTIONS        // role, command style, safety + chit-chat + WHEN-TO-ASK policy
+    SAFTY_INSTRUCTIONS        
     AVAILABLE_TOOLS           // run_command(command, is_destructive, explanation),
                               // ask_user(question, options?), answer(text)
   }
