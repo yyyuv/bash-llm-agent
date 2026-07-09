@@ -1,0 +1,48 @@
+### Phase 9 live-testing find: plan budget exhaustion (pre-fix), DECISIONS.md P9e
+### model=openai/gpt-4o-mini adapter=native session=live_check_<pid> cwd=/tmp/doit_p9_test
+### request: "find the 3 largest .log files here and gzip them"
+### files: a.log=100000 b.log=500000 c.log=50000 d.log=900000 (bytes, random content)
+
+$ find . -name '*.log' -exec du -b {} + | sort -n -r | head -n 3
+du: invalid option -- b
+usage: du [-Aclnx] [-H | -L | -P] [-g | -h | -k | -m] [-a | -s | -d depth] [-B blocksize] [-I mask] [-t threshold] [file ...]
+Plan:
+  1. find the 3 largest .log files in the current directory
+  2. gzip each of the found .log files
+$ find . -name '*.log' -exec du -k {} + | sort -n -r | head -n 3
+880	./d.log
+492	./b.log
+100	./a.log
+Proceed? [y/N] y
+$ gzip ./d.log
+Proceed? [y/N] y
+$ gzip ./b.log
+(turn ends here -- budget exhausted, a.log NEVER gzipped, no final answer)
+
+### session record (~/.doit/sessions/live_check_<pid>.jsonl), reordered to true call order:
+# 1. plan(steps=["find the 3 largest .log files in the current directory",
+#                "gzip each of the found .log files"])
+#    -> command_budget = max(1, 2 + PLAN_SLACK[=2 at the time]) = 4
+# 2. run_command: find ... -exec du -b {} + | sort -n -r | head -n 3   rc=0 (!)
+#    -- du itself errored (GNU-only -b flag), but the PIPELINE's exit code
+#       is head's, not du's -- the failure is invisible to rc!=0 retry logic.
+#       command_steps=1 (1 slot silently wasted on a no-op command).
+# 3. run_command: find ... -exec du -k {} + | sort -n -r | head -n 3   rc=0
+#    command_steps=2
+# 4. run_command: gzip ./d.log   rc=0   command_steps=3
+# 5. run_command: gzip ./b.log   rc=0   command_steps=4  -- budget(4) hit,
+#    rc==0 so NOT retry-eligible -> loop breaks. a.log never gzipped.
+#    final_answer: None
+
+### ROOT CAUSE (two compounding factors):
+# (a) a pipeline (`cmd1 | cmd2`) reports cmd2's exit code, so a real failure
+#     inside cmd1 (du's illegal GNU flag) is invisible to the rc!=0 retry
+#     check -- the model self-corrected on its own judgement (good), but
+#     "spent" a budget slot doing so, which the retry mechanism never knew
+#     to compensate for since it never saw a signalled failure.
+# (b) the model executed "gzip each" as ONE COMMAND PER FILE rather than
+#     one batched command over all 3 files, tripling step 2's real cost
+#     against the plan's own step-count-based budget estimate.
+### FIX applied (DECISIONS.md P9e): PLAN_SLACK 2->3 (controller.py) +
+### system-prompt nudge to batch same-type multi-target actions into one
+### command. Re-verified live 3x post-fix, see live_plan_batched_gpt4omini.txt.

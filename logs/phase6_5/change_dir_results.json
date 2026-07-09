@@ -5,7 +5,7 @@
     {
       "case": "change_dir_in_schema",
       "pass": true,
-      "detail": "names=['answer', 'ask_user', 'change_dir', 'forget', 'read_session', 'remember', 'run_command']"
+      "detail": "names=['answer', 'ask_user', 'change_dir', 'forget', 'plan', 'read_session', 'remember', 'run_command']"
     },
     {
       "case": "resolve_existing_dir",
@@ -30,7 +30,7 @@
     {
       "case": "write_cd_target_creates_file",
       "pass": true,
-      "detail": "path=/var/folders/zz/lc76k61s763cvptl110d54rm0000gn/T/tmpcziywryv/cd_target_abc123"
+      "detail": "path=/var/folders/zz/lc76k61s763cvptl110d54rm0000gn/T/tmphgrq7g5a/cd_target_abc123"
     },
     {
       "case": "handle_valid_path",

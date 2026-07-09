@@ -259,3 +259,50 @@ implicit reference (binding "them" to the wrong window), or failing to call
 exists to make robust. TODO: run 48/49 on a local Ollama model too.
 
 ## Phase 8: gate CLOSED — 2026-07-08, both required behaviors passing on gpt-4o-mini.
+
+## Phase 9 (multi-step plans + self-correcting retry, D11) — LIVE
+
+Offline: `tests/plan_tests.py` (16/16 — schema + `tool_schemas_for` capability
+gate, `_handle_plan` budget math/cap/disabled/empty-steps, and 8 run_turn
+integration cases: a plan chain whose second command uses the first's real
+output, the recovery-stop case, a destructive step INSIDE a plan still
+hitting the y/N gate, always-on retry in default single-command mode, no
+retry on a first-try success, retry firing at most once, retry not
+double-granting inside an already-slack'd plan budget, and plan() being
+refused when `enable_plans=false` even if a model calls it anyway). Fixing
+this phase also required updating `tests/clarify_tests.py`'s
+`test_loop_cap_limits_prompts`, which had hardcoded the *old* total
+loop-iteration cap as a magic queue length (10) — it now uses an unbounded
+"ask forever" stub instead, so it no longer breaks every time a later phase
+adds loop-guard headroom (harmless, unrelated to this phase's actual
+behavior; confirmed by re-running all `tests/*_tests.py`, 98/98 total).
+
+**Live** — required per D11's fallback trigger: gpt-4o-mini must pass BOTH
+showcase cases below or plans get demoted to described-only. Both passed —
+plans stay as the implementation. Ran in a scratch sandbox (not the repo)
+with real `.log` files of varying size; `~/doit.cfg` unchanged
+(`enable_plans` defaults `true`, matching gpt-4o-mini).
+
+| # | invocation | expected behavior | result |
+|---|---|---|---|
+| 51 | `doit "find the 3 largest .log files anywhere under <sandbox> and gzip them"` (files present, sizes vary) | `plan` announced, `find`/`du` step runs, the model reads the REAL filenames from that output and gzips exactly those (destructive `y/N` gate still fires) — output of step 1 genuinely feeds step 2, not guessed | PASS — `logs/phase9/live_plan_chain_gpt4omini.txt`; all 3 real files ended up `.gz`, nothing else touched |
+| 52 | same invocation, empty directory (no `.log` files) | recovery-stop: step 1 finds nothing, model reports that honestly via `answer` instead of attempting `gzip` on nothing | PASS — `logs/phase9/live_plan_recovery_stop_gpt4omini.txt` |
+| 53 | `doit "show the last modified time of <file> using stat --format='%y'"` | always-on retry: GNU `stat --format` is illegal on macOS/BSD `stat` (rc≠0) — model gets the stderr back and self-corrects to `stat -f '%m'` on its ONE retry, no third attempt | PASS — `logs/phase9/live_retry_stat_gpt4omini.txt` (genuine live self-correction, not scripted) |
+| 54 | same as #51, but `~/doit.cfg` forced `model=ollama/qwen3:4b-instruct`, `enable_plans=true` (deliberately ON despite D11's default-off for locals) | required comparison-chapter content: capture ONE weak-model plan failure | Plan announced fine, but the model's own step-1 command (`find ... -exec ls -lS {} \;`) doesn't actually sort globally (`-exec ... \;` runs `ls -lS` once PER file, not once on the whole batch) — it silently picked 3 of the 4 files by find's arbitrary traversal order, MISSING the true largest file (`d.log`, 900K) entirely, and its own final answer also mis-stated one gzipped file's size (called `c.log` "512 KB"; it was actually 50KB). Confirmed on disk: `d.log` left uncompressed, `a/b/c.log.gz` created. `logs/phase9/live_weak_model_plan_failure_qwen3.txt` |
+
+Watch for (report content): the qwen3 failure is subtle — the command LOOKS
+like a valid "find the N largest" idiom and the model's prose is fully
+confident, but `-exec CMD {} \;` vs `-exec CMD {} +` is exactly the kind of
+shell semantics an ~4B model gets wrong while a stronger model (gpt-4o-mini,
+case 51) used a single batched `du`/`sort -hr` pipeline that actually works.
+This is a materially worse failure mode than Phase 8's `mkdir 2020` case:
+that one was visibly incomplete (obviously 1/7 folders), this one *looks*
+complete and confidently wrong — no error, no visible gap, just a silently
+wrong selection. Also matches D11's "half-executed / silently-wrong plans
+are a genuinely NEW failure mode" concern directly.
+
+| 55 | same request pattern as #51, run independently (not scripted) to double-check the implementation, real files `d=900K b=500K a=100K c=50K` | full multi-step chain completes correctly, all 3 real targets gzipped, `c.log` correctly left alone | **FOUND A BUG first, then fixed**: pre-fix, the turn silently ended after only 2/3 gzips (`a.log` never touched, no error) — see DECISIONS.md P9e for root cause (pipeline exit-code masking hid a real `du -b` failure from the retry check, AND the model gzipped one-file-at-a-time instead of batching, together exhausting a `PLAN_SLACK=2` budget). Fixed: `PLAN_SLACK` 2→3 + a system-prompt "batch same-type actions into one command" rule. Re-verified live 3× post-fix, all correct — `logs/phase9/live_budget_exhaustion_found_pre_fix.txt` (the bug) + `logs/phase9/live_plan_batched_gpt4omini.txt` (3 clean re-runs, including a bonus recovery-stop via a real `zsh` glob-expansion failure and an `ask_user`+`plan` composition) |
+
+Watch for (report content, P9e): this is arguably the single best "why live testing matters" artifact in the whole project — the offline suite was 16/16 green because every scripted `plan()` call happens before any `run_command`, so it structurally never exercised "a command slot gets silently wasted before the plan's own budget accounting starts." A shell pipeline's exit code belongs to its LAST command, not any command that failed inside it — worth its own paragraph in the report's safety/limitations chapter, distinct from (but related to) the already-documented `grep "rm -rf"` (P2d) and `ssh -p 2222` (P2c) regex-guard tradeoffs: those are guard false-positives, this is a retry false-negative (a real failure the retry mechanism structurally cannot see).
+
+## Phase 9: gate CLOSED — 2026-07-09, both showcase cases passing on gpt-4o-mini (D11 fallback trigger not hit — plans kept, not demoted), retry proven live via a genuine BSD/GNU portability mismatch, required weak-model failure transcript captured on qwen3:4b-instruct, AND a genuine budget-exhaustion bug found live (case 55/P9e) and fixed+re-verified in the same pass.

@@ -194,8 +194,14 @@ def test_loop_cap_limits_prompts():
         return "whatever"
 
     builtins.input = _counting_input
-    # ask forever; the loop guard + cap must still terminate the turn
-    _script_llm([_decision("ask_user", {"question": "q?"}) for _ in range(10)])
+    # ask forever (an unbounded stub, not a fixed-size queue -- the loop
+    # guard's total iteration budget is an implementation detail that
+    # grows across phases, e.g. Phase 9's plan/retry slack; this test
+    # only cares that MAX_CLARIFICATIONS caps real prompts and the turn
+    # still terminates, not the exact iteration count it takes to do so)
+    llm.call = lambda messages, tool_schemas, config, session_id: _decision(
+        "ask_user", {"question": "q?"}
+    )
     controller.run_turn("ambiguous thing", Config(max_steps=1))
     check("cap_limits_prompts",
           prompts["n"] == controller.MAX_CLARIFICATIONS,

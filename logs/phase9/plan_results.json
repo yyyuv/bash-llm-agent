@@ -1,0 +1,86 @@
+{
+  "passed": 16,
+  "total": 16,
+  "results": [
+    {
+      "case": "plan_in_schema",
+      "pass": true,
+      "detail": "names=['answer', 'ask_user', 'change_dir', 'forget', 'plan', 'read_session', 'remember', 'run_command']"
+    },
+    {
+      "case": "tool_schemas_for_enabled_includes_plan",
+      "pass": true,
+      "detail": "names=['answer', 'ask_user', 'change_dir', 'forget', 'plan', 'read_session', 'remember', 'run_command']"
+    },
+    {
+      "case": "tool_schemas_for_disabled_excludes_plan",
+      "pass": true,
+      "detail": "names=['answer', 'ask_user', 'change_dir', 'forget', 'read_session', 'remember', 'run_command']"
+    },
+    {
+      "case": "handle_plan_bumps_budget",
+      "pass": true,
+      "detail": "new_budget=6 expected=6 obs=\"Plan noted (3 steps). You may now use up to 6 run_command calls this turn to carry it out \u2014 one command at a time, reading each real result before deciding the next command; do not guess values (like filenames) that an earlier step's real output will tell you. If an early step finds nothing or fails in a way that makes the rest pointless, stop and use answer to explain instead of running the remaining steps blindly.\""
+    },
+    {
+      "case": "handle_plan_disabled_rejected",
+      "pass": true,
+      "detail": "new_budget=1 obs='Plans are not available in this configuration. Just call run_command directly, one command at a time.' steps=[{'tool': 'plan', 'args': {'steps': ['a', 'b']}, 'rejected': 'plans_disabled'}]"
+    },
+    {
+      "case": "handle_plan_empty_steps_noop",
+      "pass": true,
+      "detail": "new_budget=1 obs='Plan had no steps \u2014 call run_command directly instead.'"
+    },
+    {
+      "case": "handle_plan_caps_at_max_plan_steps",
+      "pass": true,
+      "detail": "len(recorded)=8 new_budget=11"
+    },
+    {
+      "case": "handle_plan_never_shrinks_budget",
+      "pass": true,
+      "detail": "new_budget=10"
+    },
+    {
+      "case": "loop_plan_chain_feeds_forward",
+      "pass": true,
+      "detail": "seq=['plan', 'run_command', 'run_command'] final_answer='Found run3.log and compressed it.'"
+    },
+    {
+      "case": "loop_plan_recovery_stop",
+      "pass": true,
+      "detail": "seq=['plan', 'run_command'] answer='No .log files found under ~/projects \u2014 nothing to compress.'"
+    },
+    {
+      "case": "loop_plan_destructive_step_still_gated",
+      "pass": true,
+      "detail": "turn={'ts': 1783583047.516314, 'cwd': '/Users/yuvalreuveni/Documents/Claude/Projects/assingment3/bash-llm-agent', 'request': 'delete junk.txt after listing it', 'steps': [{'tool': 'plan', 'args': {'steps': ['list junk files', 'delete them']}, 'command_budget': 5}, {'tool': 'run_command', 'args': {'command': 'rm junk.txt', 'is_destructive': True, 'explanation': 'delete the junk file'}, 'blocked_reason': 'declined_by_user', 'guard_overrode_model': False, 'stdout': '', 'stderr': '', 'rc': None}], 'final_answer': 'Aborted. (Nothing was executed.)'}"
+    },
+    {
+      "case": "loop_retry_after_failure_default_single_command",
+      "pass": true,
+      "detail": "seq=['run_command', 'run_command'] rcs=[1, 0]"
+    },
+    {
+      "case": "loop_no_retry_when_command_succeeds",
+      "pass": true,
+      "detail": "seq=['run_command']"
+    },
+    {
+      "case": "loop_retry_fires_at_most_once",
+      "pass": true,
+      "detail": "seq=['run_command', 'run_command'] final_answer=None"
+    },
+    {
+      "case": "loop_retry_inside_plan_does_not_double_grant",
+      "pass": true,
+      "detail": "seq=['plan', 'run_command', 'run_command', 'run_command'] last={'tool': 'run_command', 'args': {'command': 'sudo gzip a.log', 'is_destructive': True, 'explanation': 'retry with elevated perms'}, 'blocked_reason': 'sudo', 'guard_overrode_model': False, 'stdout': '', 'stderr': '', 'rc': None}"
+    },
+    {
+      "case": "loop_plan_rejected_when_disabled",
+      "pass": true,
+      "detail": "seq=['plan'] steps=[{'tool': 'plan', 'args': {'steps': ['a', 'b', 'c']}, 'rejected': 'plans_disabled'}]"
+    }
+  ]
+}

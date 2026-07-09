@@ -33,6 +33,23 @@ also a within-turn step: it validates the target and writes it to
 ~/.doit/cd_target_$DOIT_SESSION, then continues the loop — the doit()
 shell wrapper (shell/*_snippet.sh) performs the real cd after this process
 exits. Composes with the other tools (e.g. "go there and remember it").
+
+Phase 9 (DECISIONS.md D11) adds `plan(steps[])` and always-on retry, the
+Phase 9 extension. `plan` is a within-turn step like ask_user/remember: it
+does not consume a command step, does not execute anything itself, and is
+only offered to the model at all when config.enable_plans is true
+(tools.tool_schemas_for) — the capability gate lives at the schema level,
+not just in the controller. What it DOES do is raise `command_budget` (a
+per-turn ceiling that starts at config.max_steps and is otherwise fixed)
+to len(steps)+PLAN_SLACK, so the model can then carry the plan out with
+its usual one-decision-per-LPU-call loop: run_command, look at the real
+output, run_command again, etc. — the same mechanism that already powers
+read_session-then-act, just with a bigger budget. Retry is independent of
+plans and always on for every model: if a run_command's exit code is
+nonzero right when command_budget would otherwise end the turn, the
+budget gets one RETRY_SLACK bump (once per turn) so the model sees the
+failure and gets one corrective attempt instead of the turn silently
+ending on an error.
 """
 
 import os
@@ -58,6 +75,31 @@ MAX_MEMORY_OPS = 3
 # needs iteration slack so the model can read another session and then act.
 MAX_SESSION_READS = 3
 
+# Phase 9 (D11): a plan may declare at most this many steps (a runaway
+# "plan" with dozens of steps is not the showcase use case, and the loop
+# guard below needs a static upper bound on how far command_budget can
+# grow). PLAN_SLACK is added on top of len(steps) for natural extra
+# commands a plan often needs beyond its own listed steps (a self-correction
+# after a wrong flag, a second lookup) — matching PLAN.md's "len(steps)+
+# slack" phrasing. Bumped 2->3 after a live run (DECISIONS.md P9e) actually
+# exhausted a 2-slack budget: one command was silently wasted on a
+# pipe-masked du failure (rc=0 despite an internal du error, because only
+# the pipeline's last command's exit code is visible) before the model
+# self-corrected, leaving no room for the plan's final step. This is a
+# mitigation, not a guarantee — a plan whose steps fan out into many
+# same-type commands can still exhaust any fixed slack; see the system
+# prompt's "batch same-type actions into one command" guidance, which
+# addresses the more common cause of that fan-out directly.
+MAX_PLAN_STEPS = 8
+PLAN_SLACK = 3
+
+# Always-on self-correcting retry (D11, every model, independent of plans):
+# a single one-time bump to command_budget, granted only when a run_command
+# fails (rc != 0) right at the point the turn would otherwise end, so the
+# model gets the failure's stderr and exactly ONE corrective attempt rather
+# than the turn silently ending on an error.
+RETRY_SLACK = 1
+
 
 def run_turn(request: str, config: Config) -> None:
     """Handle one user request end to end, printing output as we go."""
@@ -67,14 +109,23 @@ def run_turn(request: str, config: Config) -> None:
     final_answer = None
     clarifications = 0
     command_steps = 0
+    # Phase 9: command_budget starts at max_steps (single-command mode by
+    # default) and is only ever raised within this turn — by plan() up
+    # front, or by the one-time retry bump after a failed command.
+    command_budget = config.max_steps
+    retry_used = False
+    tool_schemas = tools.tool_schemas_for(config)
 
-    # Loop guard: max_steps command steps + the clarification, memory-op and
-    # session-read budgets + a little slack, so a model that never converges
-    # still terminates cleanly.
+    # Loop guard: max_steps command steps + the clarification, memory-op,
+    # session-read, plan and retry budgets + a little slack, so a model
+    # that never converges still terminates cleanly. Uses the static caps
+    # (MAX_PLAN_STEPS+PLAN_SLACK, RETRY_SLACK) rather than command_budget
+    # itself, since command_budget only grows partway through the loop.
     for _ in range(
-        config.max_steps + MAX_CLARIFICATIONS + MAX_MEMORY_OPS + MAX_SESSION_READS + 1
+        config.max_steps + MAX_CLARIFICATIONS + MAX_MEMORY_OPS + MAX_SESSION_READS
+        + MAX_PLAN_STEPS + PLAN_SLACK + RETRY_SLACK + 1
     ):
-        decision = llm.call(messages, tools.TOOL_SCHEMAS, config, session_id)
+        decision = llm.call(messages, tool_schemas, config, session_id)
 
         if decision.tool_name == "answer":
             final_answer = decision.args.get("text", "")
@@ -105,14 +156,27 @@ def run_turn(request: str, config: Config) -> None:
             _append_tool_result(messages, decision, observation)
             continue
 
+        if decision.tool_name == "plan":
+            observation, command_budget = _handle_plan(
+                decision.args, config, command_budget, steps
+            )
+            _append_tool_result(messages, decision, observation)
+            continue
+
         if decision.tool_name == "run_command":
-            blocked_message, observation = _handle_run_command(decision.args, config, steps)
+            blocked_message, observation, returncode = _handle_run_command(
+                decision.args, config, steps
+            )
             if blocked_message is not None:
                 final_answer = blocked_message
                 break
             command_steps += 1
-            if command_steps >= config.max_steps:
-                break
+            if command_steps >= command_budget:
+                if returncode != 0 and not retry_used:
+                    retry_used = True
+                    command_budget += RETRY_SLACK
+                else:
+                    break
         else:
             observation = f"unknown tool: {decision.tool_name}"
             print(f"doit: model chose an unknown tool ({decision.tool_name})", file=sys.stderr)
@@ -135,10 +199,14 @@ def run_turn(request: str, config: Config) -> None:
 def _handle_run_command(args: dict, config: Config, steps: list) -> tuple:
     """Safety-gate and (if allowed) execute one run_command decision.
 
-    Returns (blocked_message, observation). blocked_message is None and
-    the turn continues normally when the command ran; otherwise it is
-    the text to show the user and the turn ends without executing
-    anything (sudo, an interactive program, or a declined confirmation).
+    Returns (blocked_message, observation, returncode). blocked_message is
+    None and the turn continues normally when the command ran; otherwise
+    it is the text to show the user and the turn ends without executing
+    anything (sudo, an interactive program, or a declined confirmation) —
+    returncode is None in that case, since nothing ran (no retry applies:
+    a policy refusal isn't the technical failure retry exists to recover
+    from). When the command does run, returncode is its real exit code,
+    which the caller uses to decide whether the Phase 9 retry bump fires.
     """
     command = args.get("command", "")
     check = safety.check_command(command, args.get("is_destructive", False))
@@ -147,7 +215,7 @@ def _handle_run_command(args: dict, config: Config, steps: list) -> tuple:
         message = f"doit: refusing to run sudo commands. Run it yourself if you're sure:\n    {command}"
         print(message)
         steps.append(_blocked_step(args, "sudo", check))
-        return message, None
+        return message, None, None
 
     if check.is_interactive:
         message = (
@@ -156,15 +224,16 @@ def _handle_run_command(args: dict, config: Config, steps: list) -> tuple:
         )
         print(message)
         steps.append(_blocked_step(args, "interactive", check))
-        return message, None
+        return message, None, None
 
     if check.is_destructive and not _confirm_destructive(command, args.get("explanation", "")):
         message = "Aborted. (Nothing was executed.)"
         print(message)
         steps.append(_blocked_step(args, "declined_by_user", check))
-        return message, None
+        return message, None, None
 
-    return None, _execute_command(args, config, steps, check)
+    observation, returncode = _execute_command(args, config, steps, check)
+    return None, observation, returncode
 
 
 def _confirm_destructive(command: str, explanation: str) -> bool:
@@ -342,10 +411,12 @@ def _blocked_step(args: dict, reason: str, check: safety.SafetyCheck) -> dict:
     }
 
 
-def _execute_command(args: dict, config: Config, steps: list, check: safety.SafetyCheck) -> str:
+def _execute_command(args: dict, config: Config, steps: list, check: safety.SafetyCheck) -> tuple:
     """Run one run_command decision, print its output, record the step.
 
-    Returns the (truncated) observation text to feed back to the LPU.
+    Returns (observation, returncode): the (truncated) observation text to
+    feed back to the LPU, and the command's real exit code (Phase 9's
+    retry bump in run_turn keys off this).
     """
     command = args.get("command", "")
     print(f"$ {command}", file=sys.stderr)
@@ -370,10 +441,58 @@ def _execute_command(args: dict, config: Config, steps: list, check: safety.Safe
             "rc": result.returncode,
         }
     )
-    return (
+    observation = (
         f"exit code: {result.returncode}\n"
         f"stdout:\n{tools.truncate_for_context(result.stdout)}\n"
         f"stderr:\n{tools.truncate_for_context(result.stderr)}"
+    )
+    return observation, result.returncode
+
+
+def _handle_plan(args: dict, config: Config, command_budget: int, steps: list) -> tuple:
+    """Announce a multi-step plan and (if enabled) raise this turn's command budget.
+
+    A within-turn step, like ask_user/remember/change_dir: it does not
+    execute anything and does not consume a command step. Returns
+    (observation, new_command_budget) — command_budget is unchanged when
+    plans are disabled or the plan is empty.
+
+    Capability-gated by config.enable_plans (D11). The real enforcement is
+    that tools.tool_schemas_for() already withholds this tool's schema
+    from a model whose config disables it, so it should never actually be
+    called in that case; this check is a defensive backstop for a
+    prompted-adapter model that hallucinates the tool anyway.
+    """
+    if not config.enable_plans:
+        steps.append({"tool": "plan", "args": args, "rejected": "plans_disabled"})
+        return (
+            "Plans are not available in this configuration. Just call "
+            "run_command directly, one command at a time.",
+            command_budget,
+        )
+
+    plan_steps = [str(s).strip() for s in (args.get("steps") or []) if str(s).strip()]
+    if not plan_steps:
+        steps.append({"tool": "plan", "args": args, "error": "empty plan"})
+        return "Plan had no steps — call run_command directly instead.", command_budget
+
+    truncated = plan_steps[:MAX_PLAN_STEPS]
+    print("Plan:")
+    for index, step in enumerate(truncated, 1):
+        print(f"  {index}. {step}")
+
+    new_budget = max(command_budget, len(truncated) + PLAN_SLACK)
+    steps.append({"tool": "plan", "args": {"steps": truncated}, "command_budget": new_budget})
+    return (
+        f"Plan noted ({len(truncated)} steps). You may now use up to "
+        f"{new_budget} run_command calls this turn to carry it out — one "
+        f"command at a time, reading each real result before deciding the "
+        f"next command; do not guess values (like filenames) that an "
+        f"earlier step's real output will tell you. If an early step "
+        f"finds nothing or fails in a way that makes the rest pointless, "
+        f"stop and use answer to explain instead of running the remaining "
+        f"steps blindly.",
+        new_budget,
     )
 
 

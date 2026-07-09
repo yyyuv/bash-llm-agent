@@ -5,7 +5,7 @@
     {
       "case": "tools_in_schema",
       "pass": true,
-      "detail": "names=['answer', 'ask_user', 'change_dir', 'forget', 'read_session', 'remember', 'run_command']"
+      "detail": "names=['answer', 'ask_user', 'change_dir', 'forget', 'plan', 'read_session', 'remember', 'run_command']"
     },
     {
       "case": "add_and_load",

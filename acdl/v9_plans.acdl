@@ -1,0 +1,167 @@
+// doit v9 — multi-step command plans + self-correcting retry (Phase 9, D11)
+// Builds on v8 (multi-tasking). Realizes D11: an opt-in plan(steps[]) tool
+// that raises THIS TURN's command budget (never a global max_steps bump),
+// plus an always-on, model-independent retry: one corrective attempt after
+// any run_command that fails (rc != 0) right at the point the turn would
+// otherwise end.
+//
+// Why NOT a bigger max_steps: single-command mode must stay the default (a
+// trivial "list files" request should still cost exactly one LPU call).
+// plan() is the model's own explicit signal that a request needs more than
+// one command, and it only ever WIDENS the ceiling for the turn that asked
+// for it (command_budget = max(command_budget, len(steps)+PLAN_SLACK)).
+//
+// Why plan() doesn't itself execute anything: each step still goes through
+// the ordinary run_command safety gate (sudo/interactive hard-block,
+// destructive y/N) individually — the printed plan is a PREVIEW for the
+// user, not a blanket authorization. The model is expected to look at each
+// step's REAL output before deciding the next command (find's actual
+// filenames, not guessed ones) — this is why plan() takes plain-English
+// step descriptions, not literal commands: the literal commands are
+// decided one run_command at a time, same loop as every other phase.
+//
+// Why retry is separate from plans and always on: D11 calls out Phase 8's
+// silent-partial-completion failure (mkdir 2020, turn over, no error) as
+// the felt need — the fix for a build-up failure isn't "give the model
+// more steps up front", it's "don't let a failing LAST step end the turn
+// with no chance to react". So retry fires for every model, plan or no
+// plan, whenever a run_command's exit code is nonzero exactly as the
+// (possibly plan-raised) budget is exhausted: the model sees the stderr
+// and gets ONE more command before the turn really ends.
+//
+// Capability gate (not adapter gate): AVAILABLE_TOOLS omits plan entirely
+// for a model configured with enable_plans=false (tools.tool_schemas_for)
+// — the weak model is never even told the tool exists. Retry needs no gate;
+// a single corrective step is within any model's competence.
+//
+// Code mapping:
+//   AVAILABLE_TOOLS (plan included/omitted) <-> tools.tool_schemas_for(config)
+//   plan announcement + budget bump          <-> controller._handle_plan
+//   command_budget (per-turn, starts at max_steps) <-> controller.run_turn locals
+//   retry bump (one-time, rc!=0 at budget edge)    <-> controller.run_turn's
+//                                                       run_command branch
+//   per-step destructive/sudo/interactive gates    <-> controller._handle_run_command
+//                                                       (UNCHANGED from v2)
+//   plan-tool guidance + recovery-stop rule        <-> prompts/system_prompt.txt
+//   everything else                                <-> unchanged from v8
+
+DoitAgentV9Plans[@T, I]: {
+    S: {
+        AGENT_INSTRUCTIONS        // + plan usage rule + recovery-stop rule
+                                  // ("if a step finds nothing / fails such
+                                  // that the rest is pointless, STOP and
+                                  // answer — do not plow on or silently
+                                  // half-finish")
+        AVAILABLE_TOOLS           // run_command, ask_user, answer, remember,
+                                  // forget, change_dir, read_session, and
+                                  // plan(steps[]) -- ONLY when
+                                  // sys.config.enable_plans == true
+    }
+    U: {
+        env.cwd
+        env.datetime
+        env.shell
+        env.os
+    }
+
+    U: {
+        MEMORY_HEADER
+        ForEach(m: sys.memories) { sys.memory_line[m] }
+    }
+
+    U: {
+        OTHER_SESSIONS_HEADER
+        ForEach(s: sys.other_sessions) { sys.session_summary[s] }
+    }
+
+    ForEach(@t: range(1, @T-1)) {              // this session's own history
+        U: env.history[@t].request
+        ForEach(@i: env.history[@t].steps) {
+            If env.history[@t].steps[@i].tool == ask_user {
+                A: env.history[@t].steps[@i].question
+                U: env.history[@t].steps[@i].reply
+            }
+            ElseIf env.history[@t].steps[@i].tool == plan {
+                A: env.history[@t].steps[@i].announced_steps   // NOT replayed
+                                                                // as binding —
+                                                                // gist only
+            }
+            ElseIf env.history[@t].steps[@i].ran {
+                A: env.history[@t].steps[@i].command
+                U: truncate(env.history[@t].steps[@i].output)
+            }
+            Else {
+                A: env.history[@t].steps[@i].blocked
+            }
+        }
+        If env.history[@t].final_answer { A: env.history[@t].final_answer }
+    }
+
+    U: {
+        USER_SHELL_HISTORY_HEADER
+        ForEach(h: env.recent_user_commands[@T]) { env.shell_cmd[h] }
+    }
+
+    // --- the current turn: this is where v9 actually changes shape ---
+    U: env.user_request[@T]
+
+    // command_budget starts at sys.config.max_steps (1 by default);
+    // retry_used starts false. Both are per-turn counters tracked by
+    // controller.run_turn, not ACDL state — shown here as comments since
+    // this language has no bare assignment statement (see Var-command_steps
+    // below, same reasoning).
+
+    ForEach(@i: range(1, I)) {
+        A: sys.tool_call[@T.i]                     // ... | plan | run_command
+
+        If sys.tool_call[@T.i] == plan {
+            If sys.config.enable_plans == false {
+                T: sys.plan_rejected[@T.i]          // "plans not available
+                                                     //  in this config"
+                // command_budget UNCHANGED — defensive backstop only; the
+                // tool shouldn't have been offered in the first place.
+            } Else {
+                // command_budget := Max(command_budget, len(steps) + PLAN_SLACK)
+                // — a controller.run_turn local, not ACDL state; no bare
+                // assignment statement exists in this language, so it's
+                // recorded here as commentary rather than a statement.
+                T: sys.plan_noted[@T.i]             // prints the plan;
+                                                     // states the new budget
+            }
+            // within-turn step: does NOT consume command_budget. Loop
+            // continues so the model carries the plan out one run_command
+            // at a time, same mechanism as every other phase.
+        }
+
+        ElseIf sys.tool_call[@T.i] == run_command {
+            // UNCHANGED per-step gate from v2: sudo -> hard refuse;
+            // interactive -> hard refuse; destructive -> y/N; else execute.
+            T: sys.command_result[@T.i]             // {rc, stdout, stderr}
+            // command_steps := command_steps + 1 — controller.run_turn local
+
+            If command_steps >= command_budget {
+                If sys.command_result[@T.i].rc != 0 AND retry_used == false {
+                    T: sys.retry_granted[@T.i]       // retry_used := true;
+                                                      // command_budget +=
+                                                      // RETRY_SLACK (=+1) —
+                                                      // controller.run_turn
+                                                      // locals, not ACDL
+                                                      // state. Turn continues:
+                                                      // the model sees the
+                                                      // failing rc/stderr
+                                                      // above and gets one
+                                                      // corrective run_command.
+                } Else {
+                    T: sys.turn_ends[@T.i]           // turn ends here (loop
+                                                      // exit is implicit —
+                                                      // no Break statement
+                                                      // in this language)
+                }
+            }
+        }
+
+        // other branches (ask_user, remember/forget, change_dir,
+        // read_session) unchanged from v8 — all within-turn steps that
+        // don't touch command_budget. answer ends the turn as always.
+    }
+

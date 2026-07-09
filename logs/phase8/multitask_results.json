@@ -5,7 +5,7 @@
     {
       "case": "read_session_in_schema",
       "pass": true,
-      "detail": "names=['answer', 'ask_user', 'change_dir', 'forget', 'read_session', 'remember', 'run_command']"
+      "detail": "names=['answer', 'ask_user', 'change_dir', 'forget', 'plan', 'read_session', 'remember', 'run_command']"
     },
     {
       "case": "excludes_current",
@@ -25,7 +25,7 @@
     {
       "case": "summary_content",
       "pass": true,
-      "detail": "summary={'id': 's1', 'ts': 1783525958.174957, 'cwd': '/home/y', 'requests': ['second', 'third']}"
+      "detail": "summary={'id': 's1', 'ts': 1783583045.933491, 'cwd': '/home/y', 'requests': ['second', 'third']}"
     },
     {
       "case": "max_sessions_cap",
