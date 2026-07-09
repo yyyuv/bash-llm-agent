@@ -29,67 +29,44 @@
 //   local-vs-cross-reference rule   <-> prompts/system_prompt.txt
 //   everything else                 <-> unchanged from v7
 
-DoitAgentV8Multitask[@T, I]: {
+DoitAgentMultitask[@T, I]: {
     S: {
-        AGENT_INSTRUCTIONS        // + local-by-default vs. explicit cross-reference rule
-        AVAILABLE_TOOLS           // run_command, ask_user, answer, remember, forget,
-                                  // change_dir, read_session(session_id)  -- 7 tools now
+      AGENT_INSTRUCTIONS        
+        SAFTY_INSTRUCTIONS
+        CLARIFICATION_INSTRUCTIONS
+        MEMORY_INSTRUCTIONS
+        CROSS_SESSION_INSTRUCTIONS
+        AVAILABLE_TOOLS           // read_session(session_id)
     }
     U: {
-        env.cwd
-        env.datetime
-        env.shell
-        env.os
+    ENV_INFO(env.cwd[@T], env.datetime[@T], env.shell[@T], env.os[@T])
     }
 
     U: {
-        MEMORY_HEADER
-        ForEach(m: sys.memories) { sys.memory_line[m] }
+        MEMORY_HEADER                                  // "Known facts about the user ..."
+        sys.memories
     }
 
-    // --- NEW: awareness of OTHER terminals, without drowning in them.
-    // Always injected (the (a)-half of Decision 10c), one line per other
-    // recently-active session; skipped entirely when there are none (the
-    // common single-terminal case). Recency-filtered so stale sessions
-    // don't pollute context. ---
     U: {
         OTHER_SESSIONS_HEADER
         ForEach(s: sys.other_sessions) {
-            sys.session_summary[s]     // "session <id> (<age>, in <cwd>): <recent requests>"
+            Summarize(sys.session[s])     // "session <id> (<age>, in <cwd>): <recent requests>"
         }
     }
 
-    // --- this session's OWN replayed history (unchanged from v7). Sits
-    // AFTER the other-session summaries so an implicit reference in the
-    // request binds here, locally, not to another window. ---
-    ForEach(@t: range(1, @T-1)) {
-        U: env.history[@t].request
-        ForEach(@i: env.history[@t].steps) {
-            If env.history[@t].steps[@i].tool == ask_user {
-                A: env.history[@t].steps[@i].question
-                U: env.history[@t].steps[@i].reply
-            }
-            ElseIf env.history[@t].steps[@i].ran {
-                A: env.history[@t].steps[@i].command
-                U: truncate(env.history[@t].steps[@i].output)
-            }
-            Else {
-                A: env.history[@t].steps[@i].blocked
-            }
-        }
-        If env.history[@t].final_answer { A: env.history[@t].final_answer }
-    }
+    // replay the last K turns of this session --- as before
+      
+    // Current turn: a multi-step loop over steps taken --- as before
 
-    // --- user's manual shell activity (unchanged from v7) ---
-    U: {
+     U: {
         USER_SHELL_HISTORY_HEADER
-        ForEach(h: env.recent_user_commands[@T]) { env.shell_cmd[h] }
+        env.recent_user_commands[@T]
     }
 
     // --- the current turn ---
     U: env.user_request[@T]
     ForEach(@i: range(1, I)) {
-        A: sys.tool_call[@T.i]                    // ... | read_session
+        A: sys.tool_call[@T.i]                    
 
         If sys.tool_call[@T.i] == read_session {
             If sys.target_is_other_session {
@@ -97,10 +74,8 @@ DoitAgentV8Multitask[@T, I]: {
             } Else {
                 T: sys.read_session_unavailable[@T.i]          // self / unknown / empty id
             }
-            // within-turn step: does NOT consume max_steps; loop continues,
-            // so the model can read another session and then act on it.
+            // The model can read another session and then act on it.
         }
-        // other branches (run_command safety gate, change_dir, ask_user,
-        // remember/forget) unchanged from v7. answer ends the turn.
+        // other tool use context blocks --- as before
     }
 }

@@ -19,25 +19,23 @@
 //   splice point in build_messages    <-> context.build_messages (after replayed history, before env.user_request)
 //   everything else                   <-> unchanged from v6.5
 
-DoitAgentV7UserAware[@T, I]: {
-    S: {
-        AGENT_INSTRUCTIONS        // + how to read the USER_SHELL_HISTORY block
-        AVAILABLE_TOOLS           // unchanged: 6 tools (run_command, ask_user, answer,
-                                  // remember, forget, change_dir)
+DoitAgentUserAware[@T, I]: {
+    S: {AGENT_INSTRUCTIONS        
+        SAFTY_INSTRUCTIONS
+        CLARIFICATION_INSTRUCTIONS
+        MEMORY_INSTRUCTIONS
+        AVAILABLE_TOOLS           
     }
     U: {
-        env.cwd
-        env.datetime
-        env.shell
-        env.os
+    ENV_INFO(env.cwd[@T], env.datetime[@T], env.shell[@T], env.os[@T])
     }
 
     U: {
-        MEMORY_HEADER
-        ForEach(m: sys.memories) { sys.memory_line[m] }
+        MEMORY_HEADER                                  // "Known facts about the user ..."
+        sys.memories
     }
 
-    // --- replay last K turns (unchanged from v6.5: doit's OWN commands) ---
+    // replay last K turns
     ForEach(@t: range(1, @T-1)) {
         U: env.history[@t].request
         ForEach(@i: env.history[@t].steps) {
@@ -56,21 +54,16 @@ DoitAgentV7UserAware[@T, I]: {
         If env.history[@t].final_answer { A: env.history[@t].final_answer }
     }
 
-    // --- NEW: what the USER typed directly in this terminal, not through
-    // doit at all — the actual Phase 7 content. Read from shell_hist,
-    // doit's own invocations already filtered out. Skipped entirely when
-    // empty (no hook installed yet, or nothing typed this terminal). ---
     U: {
         USER_SHELL_HISTORY_HEADER
-        ForEach(h: env.recent_user_commands[@T]) { env.shell_cmd[h] }   // "[in <cwd>] <cmd>"
+        env.recent_user_commands[@T] // Read from shell_hist, filter out doit commands, skipped when empty
     }
 
-    // --- the current turn ---
+    // --- Current turn ---
     U: env.user_request[@T]
     ForEach(@i: range(1, I)) {
         A: sys.tool_call[@T.i]
-        // unchanged branches from v6.5 (run_command safety gate, change_dir
-        // handoff, ask_user/remember/forget within-turn steps)
+
+    // Continuation as before    
     }
-    // answer ends the turn.
 }

@@ -37,34 +37,24 @@
 // model. Only the S:/U:/A:/T: lines are real messages in the context; the
 // branches just select WHICH message gets emitted.
 
-DoitAgentV6Memory[@T, I]: {
-    S: {                          // system prompt — sent once, first message
-        AGENT_INSTRUCTIONS        // role, command style, safety + chit-chat + when-to-ask
-                                  //   + WHEN-TO-REMEMBER policy (durable facts only)
-        AVAILABLE_TOOLS           // run_command(command, is_destructive, explanation),
-                                  // ask_user(question, options?), answer(text),
-                                  // remember(fact), forget(id)
+DoitAgentMemory[@T, I]: {
+    S: {AGENT_INSTRUCTIONS        
+        SAFTY_INSTRUCTIONS
+        CLARIFICATION_INSTRUCTIONS
+        MEMORY_INSTRUCTIONS
+        AVAILABLE_TOOLS           // + remember(fact), forget(id)
     }
-    U: {                          // ambient environment facts, as a user message
-        env.cwd
-        env.datetime
-        env.shell
-        env.os
-    }
+    U: {
+    ENV_INFO(env.cwd[@T], env.datetime[@T], env.shell[@T], env.os[@T])
+  }
 
-    // --- persistent memory: ALL facts, every turn, each with its [id] (NEW in v6) ---
-    // Not filtered by relevance (Decision 9a) and not keyed by session — a
-    // shared store, so it sits with the ambient setup above the history loop.
-    // (The read from memories.json is controller work; what's shown here is
-    // only the resulting text block that becomes part of the U: message.)
+  
     U: {
         MEMORY_HEADER                                  // "Known facts about the user ..."
-        ForEach(m: sys.memories) {
-            sys.memory_line[m]                         // "- [<id>] <text>"
-        }
+        sys.memories
     }
 
-    // --- replay the last K turns of THIS session as chat (unchanged from v5) ---
+    // replay the last K turns of this session as chat
     ForEach(@t: range(1, @T-1)) {
         U: env.history[@t].request
         ForEach(@i: env.history[@t].steps) {
@@ -73,30 +63,24 @@ DoitAgentV6Memory[@T, I]: {
                 U: env.history[@t].steps[@i].reply          // "(answered) <reply>" | "(no answer)"
             }
             ElseIf env.history[@t].steps[@i].ran {
-                A: env.history[@t].steps[@i].command        // "$ <command>"
-                U: truncate(env.history[@t].steps[@i].output)   // COLD budget
+                A: env.history[@t].steps[@i].command        
+                U: truncate(env.history[@t].steps[@i].output)   
             }
             Else {
                 A: env.history[@t].steps[@i].blocked        // "(did not run — <reason>): <command>"
             }
-            // remember/forget steps are recorded in history but NOT replayed:
-            // sys.memories above already carries the current state authoritatively.
-        }
+            
+            }
         If env.history[@t].final_answer {
             A: env.history[@t].final_answer
         }
     }
 
-    // --- the current turn: a multi-step loop over I ---
-    // Every If/ElseIf here branches on controller-only state (which tool was
-    // called, the clarification counter, a memory-id lookup, the safety
-    // check). None of that state is a message; only the T: line each branch
-    // resolves to is what actually gets appended to the context.
-    U: env.user_request[@T]
+    // Current turn: a multi-step loop over steps taken
+        U: env.user_request[@T]
     ForEach(@i: range(1, I)) {                              // steps taken so far this turn
-        A: sys.tool_call[@T.i]                             // run_command | ask_user | answer | remember | forget
-                                                            // (the model's own decision, replayed as context)
-
+        A: sys.tool_call[@T.i]                             
+        // (the model's own decision, replayed as context)
         If sys.tool_call[@T.i] == ask_user {
             If sys.clarifications >= MAX_CLARIFICATIONS {
                 T: sys.clarification_capped                 // "limit reached — commit to best guess"
@@ -112,12 +96,10 @@ DoitAgentV6Memory[@T, I]: {
 
         ElseIf sys.tool_call[@T.i] == remember {
             T: sys.memory_stored[@T.i]                      // "Stored as memory <id>: <fact>"
-            // within-turn step: does NOT consume max_steps; loop continues
         }
 
         ElseIf sys.tool_call[@T.i] == forget {
             T: sys.memory_forgotten[@T.i]                   // "Forgot memory <id>." | "no such id"
-            // within-turn step: does NOT consume max_steps; loop continues
         }
 
         ElseIf sys.tool_call[@T.i] == run_command {
@@ -125,16 +107,13 @@ DoitAgentV6Memory[@T, I]: {
             ElseIf sys.safety_check.is_interactive { T: sys.blocked }
             ElseIf sys.safety_check.is_destructive {
                 If sys.confirmed {
-                    T: truncate(sys.tool_response)             // HOT budget
+                    T: truncate(sys.tool_response)             
                 }
                 Else {
                     T: sys.blocked                            // declined / empty-on-destructive
                 }
             }
-            Else { T: truncate(sys.tool_response) }                   // read-only, runs immediately
-            // single-command mode: command_steps == max_steps ends the turn
+            Else { T: truncate(sys.tool_response) }                   
         }
-
-        // answer ends the turn (the finish signal) — no further T: is emitted.
     }
 }

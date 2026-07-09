@@ -38,7 +38,8 @@
 DoitAgentClarify[@T.I]: {
   S: {
     AGENT_INSTRUCTIONS        // role, command style, safety + chit-chat + WHEN-TO-ASK policy
-    SAFTY_INSTRUCTIONS        
+    SAFTY_INSTRUCTIONS
+    CLARIFICATION_INSTRUCTIONS        
     AVAILABLE_TOOLS           // run_command(command, is_destructive, explanation),
                               // ask_user(question, options?), answer(text)
   }
@@ -46,7 +47,7 @@ DoitAgentClarify[@T.I]: {
     ENV_INFO(env.cwd[@T], env.datetime[@T], env.shell[@T], env.os[@T])
   }
 
-  // --- replay the last K turns of THIS session as chat (unchanged from v4) ---
+  // replay the last K turns of THIS session as chat
   ForEach(@t: range(1, @T-1)) {
     U: env.history[@t].request
     ForEach(@i: env.history[@t].steps) {
