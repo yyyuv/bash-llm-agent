@@ -1,0 +1,60 @@
+Phase 7 — user shell-history awareness — live transcript
+Model: openai/gpt-4o-mini (native adapter)
+Date: 2026-07-08
+Terminal: real zsh session, ~/.zshrc updated with the Phase 7 snippet
+(shell/zshrc_snippet.sh) and re-sourced before this run.
+
+Setup note: an earlier run in the same terminal hit a bug before this
+transcript — ~/.zshrc still had the pre-Phase-7 snippet (no history hook),
+so ~/.doit/shell_hist never got created and the first "summarize what I
+just did" answer fell back to describing the environment/memory blocks
+instead of real activity. Fixed by re-applying the updated snippet to the
+live ~/.zshrc (backed up first) and re-sourcing. This transcript is the
+retest after that fix.
+
+--- terminal session (commands typed directly by the user) ---
+
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % cd logs
+yuvalreuveni@yuvals-MacBook-Pro logs % cd ..
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % mkdir data3
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "summarize what I just did"
+
+You created two directories named `data2` and `data3` in your current
+project folder. You also navigated into the `logs` directory and back to
+the parent directory multiple times, and sourced your `.zshrc`
+configuration file.
+
+--- ~/.doit/shell_hist/<session_id> at the time of this run ---
+
+1783518363|.../bash-llm-agent|doit "delete the logs"
+1783518367|.../bash-llm-agent|source ~/.zshrc
+1783518372|.../bash-llm-agent/logs|cd logs
+1783518375|.../bash-llm-agent|cd ..
+1783518382|.../bash-llm-agent|mkdir data2
+1783518389|.../bash-llm-agent|doit "summarize what I just did"
+1783518401|.../bash-llm-agent|set -a; source .env; set +a
+1783518416|.../bash-llm-agent|source ~/.zshrc
+1783518421|.../bash-llm-agent/logs|cd logs
+1783518425|.../bash-llm-agent|cd ..
+1783518435|.../bash-llm-agent|mkdir data3
+1783518445|.../bash-llm-agent|doit "summarize what I just did"
+
+--- what this proves ---
+
+1. The answer is grounded in the real shell_hist file, not hallucinated:
+   it correctly names both `data2` and `data3` (created across TWO
+   separate manual sessions), the repeated `cd logs` / `cd ..` round
+   trips, and the `.zshrc` source — all real, all typed directly by the
+   user, none of them run by doit.
+2. Filtering works: neither `doit "delete the logs"` nor either prior
+   `doit "summarize what I just did"` invocation leaked into the summary
+   — state.load_recent_user_commands correctly dropped every shell_hist
+   line starting with `doit "..."` before it ever reached the model.
+3. The `set -a; source .env; set +a` line was also correctly treated as
+   ordinary manual activity (not doit-run) but was not surfaced in the
+   answer — acceptable: the model summarized the notable filesystem/nav
+   activity, which is what "what I just did" most naturally means; the
+   env-sourcing line was available in the block if asked about directly.
+
+Result: PASS — case 44 from tests/cases.md (the assignment's headline
+"summarize what I just did" scenario).

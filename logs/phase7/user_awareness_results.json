@@ -1,0 +1,56 @@
+{
+  "passed": 10,
+  "total": 10,
+  "results": [
+    {
+      "case": "missing_file_empty",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "parses_lines",
+      "pass": true,
+      "detail": "commands=[{'ts': '1730001000', 'cwd': '/home/yuval', 'cmd': 'cd ~/school/llms/ass3'}, {'ts': '1730001005', 'cwd': '/home/yuval/school/llms/ass3', 'cmd': 'mkdir data'}, {'ts': '1730001010', 'cwd': '/home/yuval/school/llms/ass3', 'cmd': 'python train.py'}]"
+    },
+    {
+      "case": "filters_doit",
+      "pass": true,
+      "detail": "commands=['mkdir data', 'ls -la']"
+    },
+    {
+      "case": "skips_malformed",
+      "pass": true,
+      "detail": "commands=['', 'echo hi']"
+    },
+    {
+      "case": "limit_keeps_recent",
+      "pass": true,
+      "detail": "commands=['cmd25', 'cmd26', 'cmd27', 'cmd28', 'cmd29']"
+    },
+    {
+      "case": "session_isolation",
+      "pass": true,
+      "detail": "a=['echo a'] b=['echo b']"
+    },
+    {
+      "case": "block_empty",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "block_labels",
+      "pass": true,
+      "detail": "block='Commands the USER ran manually in this terminal (most recent last \u2014 these\\nwere typed directly by the user, NOT run by doit; distinct from the tool\\ncalls recorded above):\\n  [in /home/yuval] cd ~/school/llms/ass3\\n  [in /home/yuval/school/llms/ass3] mkdir data\\n'"
+    },
+    {
+      "case": "build_injects_block",
+      "pass": true,
+      "detail": "lens=3->4"
+    },
+    {
+      "case": "block_before_request",
+      "pass": true,
+      "detail": "hist_index=2 request_index=3"
+    }
+  ]
+}

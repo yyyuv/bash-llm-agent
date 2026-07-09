@@ -1,0 +1,21 @@
+Phase 5 — retest after prompt fix attempt (DECISIONS.md P5e)
+Model: openai/gpt-4o-mini (native adapter)   Session: DOIT_SESSION=p5case29_retest   Date: 2026-07-08
+
+Fix tried: added to system_prompt.txt — "A request literally phrased as a
+question ... always gets answer, even if a similar command was executed
+earlier in this conversation."
+
+Outcome: FIX DID NOT WORK. Turn 3 (identical repeat of turn 1's question)
+still executed the command instead of answering.
+
+--------------------------------------------------------------------------------
+$ doit "how do i find python files modified this week?"
+You can find Python files modified this week by using the `find` command...
+find . -name '*.py' -mtime -7
+$ doit "modify it to also show file sizes"
+$ find . -name '*.py' -mtime -7 -exec ls -lh {} \;
+[... file listing ...]
+$ doit "how do i find python files modified this week?"
+$ find . -name '*.py' -mtime -7 -exec ls -lh {} \;
+[... file listing — still executed, not answered ...]
+--------------------------------------------------------------------------------

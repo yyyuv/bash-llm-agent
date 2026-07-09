@@ -1,0 +1,4 @@
+Commands the USER ran manually in this terminal (most recent last — these
+were typed directly by the user, NOT run by doit; distinct from the tool
+calls recorded above):
+{commands}

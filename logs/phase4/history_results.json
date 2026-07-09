@@ -50,7 +50,7 @@
     {
       "case": "build_messages_order",
       "pass": true,
-      "detail": "n=6"
+      "detail": "n=7"
     }
   ]
 }

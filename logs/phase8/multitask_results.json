@@ -1,0 +1,86 @@
+{
+  "passed": 16,
+  "total": 16,
+  "results": [
+    {
+      "case": "read_session_in_schema",
+      "pass": true,
+      "detail": "names=['answer', 'ask_user', 'change_dir', 'forget', 'read_session', 'remember', 'run_command']"
+    },
+    {
+      "case": "excludes_current",
+      "pass": true,
+      "detail": "ids=['other']"
+    },
+    {
+      "case": "most_recent_first",
+      "pass": true,
+      "detail": "ids=['new', 'old']"
+    },
+    {
+      "case": "recency_filter",
+      "pass": true,
+      "detail": "ids=['fresh']"
+    },
+    {
+      "case": "summary_content",
+      "pass": true,
+      "detail": "summary={'id': 's1', 'ts': 1783525958.174957, 'cwd': '/home/y', 'requests': ['second', 'third']}"
+    },
+    {
+      "case": "max_sessions_cap",
+      "pass": true,
+      "detail": "n=3"
+    },
+    {
+      "case": "empty_when_alone",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "block_empty",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "case": "block_lists",
+      "pass": true,
+      "detail": "block='Other recent terminal sessions (OTHER windows, not this one \u2014 most recent\\nfirst). These are separate from your own conversation history above. Only\\nuse them when the user EXPLICITLY refers to work done in another window\\n(e.g. \"redo the folder task from the other terminal\"). An implicit\\nreference like \"them\", \"these\", or \"that\" means THIS session\\'s own recent\\nactivity, never these. If a summary line is too thin to actually redo the\\ntask, call read_session with its [id] to see that session in full:\\n- session f4a2 (just now, in /home/docs): create a folder for each year 2020 to 2026\\n'"
+    },
+    {
+      "case": "detail_content",
+      "pass": true,
+      "detail": "detail='Full recent history of session f4a2:\\n\\n[in /home/docs] request: create folders\\n  $ mkdir 2020 2021 2022  (exit 0)\\n  answer: Created folders 2020-2022.'"
+    },
+    {
+      "case": "detail_self",
+      "pass": true,
+      "detail": "detail='Session me is THIS session \u2014 its history is already in the conversation above; no need to fetch it.'"
+    },
+    {
+      "case": "detail_unknown_empty",
+      "pass": true,
+      "detail": "unknown='No session with id nope found (or it has no history).' empty='read_session needs a session id (see the other-sessions block).'"
+    },
+    {
+      "case": "build_injects_block",
+      "pass": true,
+      "detail": "lens=3->4"
+    },
+    {
+      "case": "ordering",
+      "pass": true,
+      "detail": "other=2 own=3 req=5"
+    },
+    {
+      "case": "handle_read_session",
+      "pass": true,
+      "detail": "obs='Full recent history of session f4a2:\\n\\n[in /tmp] request: create folders\\n  $ mkdir 2020  (exit 0)\\n  answer: done'"
+    },
+    {
+      "case": "loop_read_then_command",
+      "pass": true,
+      "detail": "seq=['read_session', 'run_command'] cmd='mkdir 2020 2021 2022 2023 2024 2025 2026'"
+    }
+  ]
+}

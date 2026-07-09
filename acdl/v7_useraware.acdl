@@ -1,0 +1,76 @@
+// doit v7 — user awareness (Phase 7)
+// Builds on v6.5 (change_dir). No new tool: this phase adds a new
+// context source, USER_SHELL_HISTORY, not a new decision the model makes.
+//
+// Mechanism: a shell hook (PROMPT_COMMAND on bash, precmd on zsh —
+// shell/bashrc_snippet.sh, shell/zshrc_snippet.sh) logs EVERY command this
+// terminal runs, including doit invocations themselves, as `ts|cwd|cmd`
+// lines to ~/.doit/shell_hist/$DOIT_SESSION. Distinguishing user-run from
+// doit-run commands does not need to cross-reference sessions/*.jsonl:
+// the simpler, near-sufficient signal (PLAN_DETAILED.md Section 9) is
+// that any logged command starting with "doit " (or exactly "doit") is
+// an invocation, not something doit itself ran — filtered in Python, not
+// the shell hook, which stays dumb and shell-agnostic.
+//
+// Code mapping:
+//   shell command logging             <-> shell/bashrc_snippet.sh, shell/zshrc_snippet.sh (_doit_log_history)
+//   shell_hist/<session_id> parsing   <-> state.load_recent_user_commands (also filters out doit invocations)
+//   USER_SHELL_HISTORY block          <-> context.user_shell_history_block + prompts/user_shell_history_block.txt
+//   splice point in build_messages    <-> context.build_messages (after replayed history, before env.user_request)
+//   everything else                   <-> unchanged from v6.5
+
+DoitAgentV7UserAware[@T, I]: {
+    S: {
+        AGENT_INSTRUCTIONS        // + how to read the USER_SHELL_HISTORY block
+        AVAILABLE_TOOLS           // unchanged: 6 tools (run_command, ask_user, answer,
+                                  // remember, forget, change_dir)
+    }
+    U: {
+        env.cwd
+        env.datetime
+        env.shell
+        env.os
+    }
+
+    U: {
+        MEMORY_HEADER
+        ForEach(m: sys.memories) { sys.memory_line[m] }
+    }
+
+    // --- replay last K turns (unchanged from v6.5: doit's OWN commands) ---
+    ForEach(@t: range(1, @T-1)) {
+        U: env.history[@t].request
+        ForEach(@i: env.history[@t].steps) {
+            If env.history[@t].steps[@i].tool == ask_user {
+                A: env.history[@t].steps[@i].question
+                U: env.history[@t].steps[@i].reply
+            }
+            ElseIf env.history[@t].steps[@i].ran {
+                A: env.history[@t].steps[@i].command
+                U: truncate(env.history[@t].steps[@i].output)
+            }
+            Else {
+                A: env.history[@t].steps[@i].blocked
+            }
+        }
+        If env.history[@t].final_answer { A: env.history[@t].final_answer }
+    }
+
+    // --- NEW: what the USER typed directly in this terminal, not through
+    // doit at all — the actual Phase 7 content. Read from shell_hist,
+    // doit's own invocations already filtered out. Skipped entirely when
+    // empty (no hook installed yet, or nothing typed this terminal). ---
+    U: {
+        USER_SHELL_HISTORY_HEADER
+        ForEach(h: env.recent_user_commands[@T]) { env.shell_cmd[h] }   // "[in <cwd>] <cmd>"
+    }
+
+    // --- the current turn ---
+    U: env.user_request[@T]
+    ForEach(@i: range(1, I)) {
+        A: sys.tool_call[@T.i]
+        // unchanged branches from v6.5 (run_command safety gate, change_dir
+        // handoff, ask_user/remember/forget within-turn steps)
+    }
+    // answer ends the turn.
+}

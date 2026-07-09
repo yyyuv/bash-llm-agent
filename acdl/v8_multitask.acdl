@@ -1,0 +1,106 @@
+// doit v8 — multi-tasking / cross-session awareness (Phase 8)
+// Builds on v7 (user awareness). Two additions, both realizing Decision 10c
+// (DECISIONS.md): (1) a new always-injected context block summarizing OTHER
+// terminal sessions, and (2) a new tool read_session(session_id) to fetch
+// one of them in full on demand.
+//
+// The assignment's two-window requirement splits cleanly:
+//   - IMPLICIT reference ("sort them by date" in window 1) must stay LOCAL.
+//     This is already handled by the per-session DOIT_SESSION keying since
+//     Phase 0: build_messages replays ONLY this session's history
+//     (state.load_recent_turns(session_id)), so window 2's more-recent
+//     turns are physically absent from window 1's context. No new code.
+//   - EXPLICIT cross-reference ("redo the folder task from the other
+//     window") must reach ACROSS. That is what this phase adds: the
+//     summaries block gives awareness that other sessions exist + a thin
+//     gist; read_session fetches full detail when the gist is too thin.
+//
+// Why the ORDER in build_messages matters: the other-session summaries sit
+// with the ambient setup (after memory, before this session's replayed
+// history), so THIS session's own turns are the closest context to the
+// request — an implicit "them" binds to them, not to another window.
+//
+// Code mapping:
+//   OTHER_SESSIONS summaries block  <-> context.other_sessions_block + prompts/other_sessions_block.txt
+//   per-session scan + heuristic summary <-> state.list_other_sessions (last-2-requests, recency-filtered)
+//   AVAILABLE_TOOLS + read_session  <-> tools.TOOL_SCHEMAS (now 7 tools)
+//   read_session fetch (detail)     <-> context.render_session_detail (last K turns of the target)
+//   read_session branch             <-> controller._handle_read_session + the run_turn loop
+//   local-vs-cross-reference rule   <-> prompts/system_prompt.txt
+//   everything else                 <-> unchanged from v7
+
+DoitAgentV8Multitask[@T, I]: {
+    S: {
+        AGENT_INSTRUCTIONS        // + local-by-default vs. explicit cross-reference rule
+        AVAILABLE_TOOLS           // run_command, ask_user, answer, remember, forget,
+                                  // change_dir, read_session(session_id)  -- 7 tools now
+    }
+    U: {
+        env.cwd
+        env.datetime
+        env.shell
+        env.os
+    }
+
+    U: {
+        MEMORY_HEADER
+        ForEach(m: sys.memories) { sys.memory_line[m] }
+    }
+
+    // --- NEW: awareness of OTHER terminals, without drowning in them.
+    // Always injected (the (a)-half of Decision 10c), one line per other
+    // recently-active session; skipped entirely when there are none (the
+    // common single-terminal case). Recency-filtered so stale sessions
+    // don't pollute context. ---
+    U: {
+        OTHER_SESSIONS_HEADER
+        ForEach(s: sys.other_sessions) {
+            sys.session_summary[s]     // "session <id> (<age>, in <cwd>): <recent requests>"
+        }
+    }
+
+    // --- this session's OWN replayed history (unchanged from v7). Sits
+    // AFTER the other-session summaries so an implicit reference in the
+    // request binds here, locally, not to another window. ---
+    ForEach(@t: range(1, @T-1)) {
+        U: env.history[@t].request
+        ForEach(@i: env.history[@t].steps) {
+            If env.history[@t].steps[@i].tool == ask_user {
+                A: env.history[@t].steps[@i].question
+                U: env.history[@t].steps[@i].reply
+            }
+            ElseIf env.history[@t].steps[@i].ran {
+                A: env.history[@t].steps[@i].command
+                U: truncate(env.history[@t].steps[@i].output)
+            }
+            Else {
+                A: env.history[@t].steps[@i].blocked
+            }
+        }
+        If env.history[@t].final_answer { A: env.history[@t].final_answer }
+    }
+
+    // --- user's manual shell activity (unchanged from v7) ---
+    U: {
+        USER_SHELL_HISTORY_HEADER
+        ForEach(h: env.recent_user_commands[@T]) { env.shell_cmd[h] }
+    }
+
+    // --- the current turn ---
+    U: env.user_request[@T]
+    ForEach(@i: range(1, I)) {
+        A: sys.tool_call[@T.i]                    // ... | read_session
+
+        If sys.tool_call[@T.i] == read_session {
+            If sys.target_is_other_session {
+                T: truncate(sys.other_session_history[@T.i])   // last K turns of the target
+            } Else {
+                T: sys.read_session_unavailable[@T.i]          // self / unknown / empty id
+            }
+            // within-turn step: does NOT consume max_steps; loop continues,
+            // so the model can read another session and then act on it.
+        }
+        // other branches (run_command safety gate, change_dir, ask_user,
+        // remember/forget) unchanged from v7. answer ends the turn.
+    }
+}

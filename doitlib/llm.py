@@ -105,9 +105,25 @@ def _call_native(messages: list, tool_schemas: list, config: Config, session_id:
     return Decision(
         tool_name=tool_call.function.name,
         args=args,
-        assistant_message=message.model_dump(),
+        assistant_message=_dump_single_tool_call(message, tool_call.id),
         tool_call_id=tool_call.id,
     )
+
+
+def _dump_single_tool_call(message, tool_call_id: str) -> dict:
+    """Drop sibling tool_calls; keep only the one we answer (DECISIONS P6e).
+
+    A native model can return >1 tool_calls in one message. We act on and
+    answer only one per loop iteration, so replaying the rest unanswered
+    would crash the next call. The dropped one isn't lost — the model
+    reissues it once it sees the updated state.
+    """
+    dumped = message.model_dump()
+    if len(dumped.get("tool_calls") or []) > 1:
+        dumped["tool_calls"] = [
+            call for call in dumped["tool_calls"] if call.get("id") == tool_call_id
+        ]
+    return dumped
 
 
 # --------------------------------------------------------------------------

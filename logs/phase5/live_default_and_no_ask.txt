@@ -1,0 +1,54 @@
+Phase 5 gate evidence — live transcript (no-answer default + anti-annoyance)
+Model: openai/gpt-4o-mini (native adapter)   Session: DOIT_SESSION=p5case27   Date: 2026-07-08
+
+Demonstrates:
+  (1) case 25 (D8 no-answer default): a single ask_user call with concrete
+      options; blank Enter -> the model proceeds with a stated default
+      ("assuming you want to clean up temporary files") -> the command is
+      destructive, so the Phase 2 y/N gate still fires regardless -> "n"
+      aborts. Both safety layers stack correctly even on the default path.
+  (2) case 28 (anti-annoyance): an unambiguous request ("list files by
+      size") does NOT call ask_user at all -- runs directly.
+Not demonstrated here: case 27's MAX_CLARIFICATIONS=2 cap -- this request
+only needed ONE question, so the cap was never exercised. Still open.
+
+--------------------------------------------------------------------------------
+$ doit "clean up my stuff"
+What specific items do you want to clean up? (e.g., temporary files, old projects, etc.)
+  1. temporary files
+  2. old projects
+  3. all files
+Your answer (number or text):
+⚠ This command modifies the filesystem:
+    rm -rf ~/Documents/Claude/Projects/assingment3/bash-llm-agent/tmp/*
+  This command removes all files in the temporary directory, assuming you want to clean up temporary files.
+Proceed? [y/N] n
+Aborted. (Nothing was executed.)
+$ doit "list files by size"
+$ ls -S
+PLAN_DETAILED.md
+DECISIONS.md
+PLAN.md
+CLAUDE.md
+doit
+doitlib
+logs
+acdl
+sessions
+tests
+prompts
+--------------------------------------------------------------------------------
+
+Notes:
+- On "clean up my stuff": ask_user was called once, with options and no
+  explicit in-question default phrase -- but unlike the earlier
+  live_default_no_statable_default.txt run (an open-ended "which files?"
+  question with no options), the model here correctly derived a sensible
+  default (the first/most common option) when the reply was empty, rather
+  than re-asking. This is the clean version of case 25 that run was
+  missing.
+- On "list files by size": zero ask_user calls -- confirms the model does
+  not ask when the request is unambiguous (anti-annoyance policy, prompt +
+  no structural need since there's nothing to disambiguate).
+- Case 27 (the 2-question cap) still needs a request that genuinely forces
+  two sequential clarifications before it resolves.

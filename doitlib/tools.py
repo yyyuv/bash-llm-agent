@@ -3,14 +3,19 @@
 The tool set IS the decision schema — the single contract every model
 codes against (PLAN.md §1). The tools grow by phase:
 
-    run_command  execute one shell command                        (Phase 1)
-    answer       reply in plain text; also the signal that ends the loop
-    ask_user     ask one clarifying question, resolved in-loop     (Phase 5)
+    run_command   execute one shell command                       (Phase 1)
+    answer        reply in plain text; also the signal that ends the loop
+    ask_user      ask one clarifying question, resolved in-loop    (Phase 5)
+    remember      save a durable fact about the user/environment   (Phase 6)
+    forget        delete a stored fact by its id                   (Phase 6)
+    change_dir    change the shell's cwd via the shell wrapper (D1)
+    read_session  fetch another terminal's history in full         (Phase 8)
 
 Schemas use the OpenAI function-calling format, which LiteLLM accepts
 for every provider.
 """
 
+import os
 import subprocess
 from dataclasses import dataclass
 
@@ -119,6 +124,118 @@ TOOL_SCHEMAS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "remember",
+            "description": (
+                "Save a durable fact or preference about the user or their "
+                "environment so future doit runs can use it (e.g. 'my project "
+                "folder is ~/school/llms/ass3', 'the user prefers ls sorted "
+                "by size', 'always use eza instead of ls'). Use ONLY for "
+                "stable facts worth keeping across sessions — never for "
+                "transient details of the current request. This does not end "
+                "the turn: you can also run a command or answer in the same "
+                "turn."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fact": {
+                        "type": "string",
+                        "description": (
+                            "The fact to store, phrased so it still makes "
+                            "sense on its own in a later, unrelated turn."
+                        ),
+                    },
+                },
+                "required": ["fact"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "forget",
+            "description": (
+                "Delete one stored memory by its id (the [id] shown in the "
+                "known-facts block). Use this to remove a fact, or — together "
+                "with remember — to change a fact the user has revised: "
+                "forget the old id, then remember the new version."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "The id of the memory to delete, e.g. 'm3'.",
+                    },
+                },
+                "required": ["id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "change_dir",
+            "description": (
+                "Change the current directory for the user's shell (e.g. "
+                "'go to my project folder', 'cd into logs'). A subprocess "
+                "cannot change its parent shell's directory directly — this "
+                "just records the target; the shell wrapper performs the "
+                "real cd after doit exits. Does not end the turn, but do NOT "
+                "automatically add a follow-up command (e.g. ls) just to "
+                "show the new directory's contents — only do that if the "
+                "user's request explicitly asked to see/list what's there. "
+                "If the request was only to change directory, answer to "
+                "confirm and stop."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": (
+                            "The directory to change into — absolute, "
+                            "relative to the current directory, or using ~."
+                        ),
+                    },
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_session",
+            "description": (
+                "Fetch the full recent history of ANOTHER terminal session "
+                "by its id (the [id] shown in the 'Other recent terminal "
+                "sessions' block). Use this ONLY when the user explicitly "
+                "refers to work done in a different window and the one-line "
+                "summary is not detailed enough to reproduce or discuss it "
+                "(e.g. 'redo the exact folder task from the other terminal'). "
+                "Do NOT use it for references to this session's own recent "
+                "activity. This does not end the turn: the fetched history "
+                "comes back to you and you continue in the same turn."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "session_id": {
+                        "type": "string",
+                        "description": (
+                            "The id of the other session to read, e.g. "
+                            "'f4a2', taken from the other-sessions block."
+                        ),
+                    },
+                },
+                "required": ["session_id"],
+            },
+        },
+    },
 ]
 
 
@@ -151,6 +268,30 @@ def run_command(command: str, shell_path: str, timeout_seconds: int) -> CommandR
             returncode=-1,
             timed_out=True,
         )
+
+
+@dataclass
+class ChangeDirResult:
+    """Outcome of validating a change_dir request."""
+
+    resolved_path: str
+    error: str = ""
+
+
+def resolve_change_dir(path: str) -> ChangeDirResult:
+    """Expand and validate a change_dir target against the real filesystem.
+
+    Resolves ~ and relative paths against the current process's cwd (which
+    doit inherits from the shell that launched it), then checks the result
+    is an existing directory. Validating here — rather than letting the
+    shell wrapper's `cd` fail silently later — lets the controller feed a
+    clear error back to the model instead of writing a bad cd_target file.
+    """
+    expanded = os.path.expanduser(path)
+    resolved = os.path.abspath(expanded)
+    if not os.path.isdir(resolved):
+        return ChangeDirResult(resolved_path=resolved, error=f"no such directory: {resolved}")
+    return ChangeDirResult(resolved_path=resolved)
 
 
 def truncate_for_context(

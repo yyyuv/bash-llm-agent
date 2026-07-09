@@ -1,0 +1,24 @@
+Phase 5 — case 29-31 chain, FIXED (DECISIONS.md P5e)
+Model: openai/gpt-4o-mini (native adapter)   Session: DOIT_SESSION=p5case29_retest2   Date: 2026-07-08
+
+Fix: moved the "how do I..." exception INTO the action-verb rule itself
+(system_prompt.txt), instead of a separate later paragraph. Root cause was
+a rule conflict: the action-verb rule explicitly lists "find" and says
+"always run_command", contradicting the separate answer-exception rule
+placed elsewhere — the model followed the specific keyword match.
+
+Outcome: turn 3 (identical repeat of turn 1's question) now correctly
+answers instead of executing. Fix confirmed live.
+
+--------------------------------------------------------------------------------
+$ doit "how do i find python files modified this week?"
+You can find Python files modified this week by using the `find` command...
+find . -name "*.py" -type f -mtime -7
+$ doit "modify it to also show file sizes"
+$ find . -name "*.py" -type f -mtime -7 -exec ls -lh {} \; | awk '{print $9, $5}'
+[... file listing ...]
+$ doit "how do i find python files modified this week?"
+You can find Python files modified this week by using the `find` command...
+find . -name "*.py" -type f -mtime -7
+[correctly answered, nothing executed]
+--------------------------------------------------------------------------------

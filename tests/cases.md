@@ -115,9 +115,18 @@ save transcripts to `logs/phase5/`.
 <!-- //TODO Phase 5 live capture (gate not closed until these are run + saved):
      [x] case 23 decline path        -> logs/phase5/live_clarify_gpt4omini.txt
      [ ] case 24 stacked-safety (Yes -> run_command -> y/N gate)  <- highest value
-     [ ] cases 25/26 no-answer default + Ctrl-C abort
-     [ ] cases 27/28 two-question cap + anti-annoyance (don't-ask)
-     [ ] cases 29-31 how-do-I -> modify it -> execute it chain
+     [x] case 25 no-answer default (stated default, still gated) -> logs/phase5/live_default_and_no_ask.txt
+         (also: logs/phase5/live_default_no_statable_default.txt -- open-ended Q with
+          no statable default, re-asks instead of guessing; keep as bonus content)
+     [ ] case 26 Ctrl-C abort
+     [ ] case 27 two-question cap (not yet forced -- case above only needed 1 question)
+     [x] case 28 anti-annoyance (don't-ask on unambiguous request) -> logs/phase5/live_default_and_no_ask.txt
+     [x] cases 29-31 how-do-I -> modify it -> execute it chain
+         found + fixed bug: identical repeat of a "how do I" question
+         executed instead of answering (history bleed). See DECISIONS.md
+         P5e: logs/phase5/live_richer_interactions_history_bleed.txt (bug),
+         live_richer_interactions_retest_after_prompt_fix.txt (1st fix
+         failed), live_richer_interactions_fixed.txt (2nd fix, confirmed).
      [ ] re-run 5a/5b on a 2nd (local Ollama) model for the comparison -->
 
 
@@ -142,3 +151,111 @@ save transcripts to `logs/phase5/`.
 
 Run 5a/5b on **≥2 models**; the weak local model over-asking (`ask_user` when
 it should assume) or failing #31 is exactly the model-comparison content.
+
+## Phase 6 (memory) — LIVE
+
+Offline: `tests/memory_tests.py` (14/14 — store/load/forget, id generation,
+malformed file, memory_block, `_handle_memory`, and run_turn integration for
+remember→answer, remember→command, and forget+remember edit). **Live
+(required for the gate)** — save transcripts to `logs/phase6/`. Memory is a
+single shared store, so run the recall/edit chain in the SAME session (any
+`DOIT_SESSION`); cross-session recall (case 36) uses a *different* session to
+prove memory is not session-scoped (P6b). Inspect `~/.doit/memories.json`
+between steps to show state.
+
+| # | invocation | expected behavior |
+|---|---|---|
+| 32 | `doit "remember that ~/school/llms/ass3 is my project folder"` | `remember` stores the fact; `answer` confirms; `memories.json` gains `[m1]` | captured: behavior_issue.txt |
+| 33 | `doit "what's my project folder?"` | `answer` recalls it from the injected memory block — nothing runs | captured: behavior_issue.txt |
+| 34 | `doit "go to my project folder and list it"` (or, until change_dir lands, `doit "list my project folder"`) | resolves "my project folder" from memory → `run_command` on `~/school/llms/ass3` | partially captured — surfaced the cd-trap (no change_dir tool yet); see good_interaction_memo.txt |
+| 36 | different `DOIT_SESSION`: `doit "what's my favourite folder?"` | recalls a fact set in a DIFFERENT session — proves memory isn't session-scoped (P6b) | captured: live_remaining_cases.txt |
+| 38 | `doit "I'm looking for a file I saved yesterday"` | does NOT call `remember` — transient detail, `memories.json` unchanged | captured: live_remaining_cases.txt |
+| bonus | edit with 2+ memories present: `doit "I changed my mind about the sort order — ask me each time instead"` | forgets the CORRECT id, unrelated memory untouched (retests the pre-P6e wrong-forget-target bug) | captured: live_remaining_cases.txt — correct target, bug did not reproduce |
+| 35 | `doit "remember I prefer ls sorted by size"` then `doit "I changed my mind — ask me each time instead"` | edit path: turn 2 does `forget(m2)` + `remember("ask each time ...")`; old fact gone, new one present |
+| 36 | in a **different** terminal/`DOIT_SESSION`: `doit "what's my project folder?"` | still recalls `[m1]` — proves memory is cross-session, not per-session (P6b) |
+| 37 | dual-trigger: `doit "make a folder called notes and remember it's where I keep notes"` | `remember` FIRST, then `run_command mkdir notes` (destructive `y/N` gate still applies); both happen in one turn (P6c) |
+| 38 | `doit "tell me a file from yesterday"` / transient chatter | does NOT call `remember` — only durable facts are stored (anti-clutter policy) |
+
+Run on **≥2 models**; watch for the weak local model over-remembering
+(storing transient junk), failing to lift the id for `forget` when editing
+(case 35), or forgetting to remember *before* the command (case 37).
+
+## Phase 6.5 (change_dir, D1 cd-trap fix) — LIVE
+
+Offline: `tests/change_dir_tests.py` (10/10 — path resolution/validation,
+cd_target file writer, `_handle_change_dir`, run_turn integration for
+change_dir→answer and change_dir→run_command). **Live** — captured in
+`logs/phase6_5/live_change_dir.txt`, using the real `shell/zshrc_snippet.sh`
+sourced in an isolated `zsh -c` subshell (not the full `~/.zshrc`, to avoid
+entangling with unrelated config) before trusting it in the real shell.
+
+| # | invocation | expected behavior | result |
+|---|---|---|---|
+| 39 | `doit "go to the logs directory"` | `change_dir` writes the cd_target file; the parent shell's real `pwd` changes after `doit` exits | PASS |
+| 40 | `doit "go to a folder called definitely_does_not_exist_xyz"` | rejected with a clear error; no cd_target file written, pwd unchanged | PASS |
+| 41 | `doit "go to the logs directory and list files in it"` | `change_dir` then `run_command`, one turn; the command must target the resolved path explicitly since the real cd hasn't happened yet | PASS on 2nd attempt — see DECISIONS.md P6.5b (prompt-paragraph fix failed; moving the warning into the tool result itself fixed it) |
+| 42 | in a REAL terminal (not sandboxed): `type doit` before/after `source ~/.zshrc`, then `doit "go to logs/ folder"` | wrapper only active after sourcing; once active, the zsh PROMPT ITSELF changes (`bash-llm-agent %` → `logs %`) — strongest possible confirmation | PASS — logs/phase6_5/p6_5.jsonl |
+| 43 | same request as #42, plain "go to X" with no listing asked for | should NOT run an unrequested follow-up command | FAILED first (model added a self-initiated `ls` hitting the old-cwd trap, P6.5b's fix didn't stop it since nothing told the model not to add it); FIXED by strengthening both the tool schema and the tool-result text (DECISIONS.md P6.5d); retested PASS on both the plain request (no `ls`) and the explicit "...and list it" request (still lists correctly) |
+
+Also verified: the real `~/.zshrc` was backed up (`~/.zshrc.doit-backup-<timestamp>`) before the snippet was appended, wrapped in `# >>> doit integration >>>` markers.
+
+## Phase 7 (user shell-history awareness) — LIVE IN PROGRESS
+
+Offline: `tests/user_awareness_tests.py` (10/10 — shell_hist parsing, filtering
+out doit's own invocations, malformed/missing-file handling, the
+`USER_SHELL_HISTORY_LIMIT=20` cap, per-session isolation, and the block's
+presence/absence/position in `build_messages`) — all against synthetic
+shell_hist files, no real shell hook exercised.
+
+**Setup snag (fixed):** the first live attempt hit stale config — `~/.zshrc`
+still had the pre-Phase-7 snippet (the repo's `shell/zshrc_snippet.sh` had
+been updated, but the *live* `~/.zshrc` had not), so `~/.doit/shell_hist`
+was never created and doit fell back to summarizing the memory/environment
+blocks instead of real activity. Fixed by re-applying the updated snippet
+to the live `~/.zshrc` (backed up first as `~/.zshrc.doit-backup-<ts>`) and
+re-sourcing. Lesson for future phases that touch the shell snippets:
+editing `shell/*_snippet.sh` in the repo does NOT touch the user's actual
+`~/.zshrc` / `~/.bashrc` — that's a separate, explicit live-edit step.
+
+| # | manual shell activity (typed directly, not through doit) | invocation | expected behavior | result |
+|---|---|---|---|---|
+| 44 | `cd logs`, `cd ..`, `mkdir data2`/`data3` (across two sub-sessions), plus a `doit "delete the logs"` and `doit "summarize..."` in between | `doit "summarize what I just did"` | `answer` naming the real manual commands (both `mkdir`s, the `cd` round trips), grounded in `USER_SHELL_HISTORY` — no `doit "..."` invocation lines leak in | PASS — `logs/phase7/live_summarize_gpt4omini.txt` |
+| 45 | `cat missing_file_xyz.txt` (real command, exits 1) | `doit "why did my last command fail?"` | `answer` referencing the failed command from shell history (doit never ran it, so this can only come from the hook) | PASS — `logs/phase7/live_cases_45_46_47_gpt4omini.txt` |
+| 46 | user manually `cd`s 3 levels into a scratch dir, no doit call in between | `doit "what directory am I in?"` | reports the cwd from the newest shell_hist line / `os.getcwd()`, not a stale value from an earlier doit turn | PASS — `logs/phase7/live_cases_45_46_47_gpt4omini.txt` |
+| 47 | nothing typed yet this terminal (fresh `DOIT_SESSION`, hook installed) | `doit "what did I just do?"` | honestly reports there's no recent manual activity to summarize — the block is empty/absent, not hallucinated | PASS — `logs/phase7/live_cases_45_46_47_gpt4omini.txt` |
+
+Watch for: a weak local model inventing plausible-sounding manual commands
+instead of reading the block verbatim (hallucination under an empty/short
+`USER_SHELL_HISTORY`) — exactly the kind of model-comparison content this
+suite exists to surface. (Cases 45–47 were driven from a non-interactive
+shell that can't run the real precmd/PROMPT_COMMAND hook — each appends
+one line to shell_hist in the exact format the hook writes, then calls the
+real `doit` binary + real model; case 44 already proved the hook itself
+works end to end in a real interactive terminal.)
+
+## Phase 7: gate CLOSED — 2026-07-08, all 4 cases passing on gpt-4o-mini.
+
+## Phase 8 (multi-tasking / cross-session awareness, Decision 10c) — LIVE
+
+Offline: `tests/multitask_tests.py` (16/16 — `list_other_sessions` filtering/
+ordering/recency/caps, the summaries block, `render_session_detail`,
+`build_messages` block-injection + ordering, `_handle_read_session`, and a
+run_turn read_session→run_command integration). **Live** — the assignment's
+exact two-terminal scenario, driven through the real `doit` binary with two
+distinct `DOIT_SESSION` ids (the same isolation a second real terminal gets
+from the shell snippet). Transcript in `logs/phase8/`; genuine session files
+preserved at `~/.doit/sessions/p8win1.jsonl` + `p8win2.jsonl`.
+
+| # | scenario | invocation | expected behavior | result |
+|---|---|---|---|---|
+| 48 | window 1 listed files; window 2 then created year folders (more recent) | window 1: `doit "now sort them by date"` | IMPLICIT ref stays LOCAL — `ls -t` on window 1's own files, NOT window 2's folders, despite window 2 acting more recently | PASS — `logs/phase8/live_two_window_gpt4omini.txt` |
+| 49 | same two sessions as #48 | window 1: `doit "redo here the exact same folder task I did in the other terminal window"` | EXPLICIT cross-ref reaches ACROSS — `read_session("p8win2")` fires, model fetches window 2's `mkdir {2020..2026}` and reproduces it here | PASS — `logs/phase8/live_two_window_gpt4omini.txt` |
+| 50 | single terminal, no other recent sessions | any request | other-sessions block absent entirely (skipped when empty); no spurious cross-session noise | PASS (offline `test_block_empty_when_no_others` + `test_build_injects_block_only_with_others`); covered live implicitly |
+
+Watch for: a weak local model over-reaching into another session on an
+implicit reference (binding "them" to the wrong window), or failing to call
+`read_session` on an explicit cross-reference (two-step retrieval is where
+8B models stumble) — exactly the model-comparison content Decision 10(c)
+exists to make robust. TODO: run 48/49 on a local Ollama model too.
+
+## Phase 8: gate CLOSED — 2026-07-08, both required behaviors passing on gpt-4o-mini.

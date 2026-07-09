@@ -1,0 +1,3 @@
+Known facts about the user (persistent memory — use them to interpret
+requests; each has an [id] you can pass to forget):
+{memories}

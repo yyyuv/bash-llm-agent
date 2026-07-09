@@ -19,6 +19,20 @@ and re-calls the model — all inside the same turn. A clarification is NOT
 a command step: it doesn't count against max_steps. To keep doit from
 nagging, at most MAX_CLARIFICATIONS questions are asked per turn; past
 that the model is told to proceed with its best assumption (Section 6).
+
+Phase 6 adds the `remember`/`forget` tools. Like ask_user, a memory op is
+a within-turn step, not a command step: it applies the change to the
+shared memory store, feeds the result back, and the loop continues — so
+the model can store a fact AND run a command (or answer) in one turn (the
+"move here, and this is my project folder" case). Editing a fact is a
+forget followed by a remember across two steps.
+
+Adds `change_dir` (D1's cd-trap fix, implemented as a prerequisite ahead
+of Phase 7). A subprocess cannot change its parent shell's cwd, so this is
+also a within-turn step: it validates the target and writes it to
+~/.doit/cd_target_$DOIT_SESSION, then continues the loop — the doit()
+shell wrapper (shell/*_snippet.sh) performs the real cd after this process
+exits. Composes with the other tools (e.g. "go there and remember it").
 """
 
 import os
@@ -33,6 +47,17 @@ from .config import Config, resolve_shell
 # prompt — beyond it the model is forced to act on its best interpretation.
 MAX_CLARIFICATIONS = 2
 
+# Loop-guard headroom for memory ops (Phase 6). Memory ops are NOT capped
+# behaviourally the way clarifications are (they don't pester the user), but
+# the loop guard needs slack so a legitimate forget + remember + command
+# sequence isn't truncated. This is a ceiling on iterations, not a policy.
+MAX_MEMORY_OPS = 3
+
+# Loop-guard headroom for read_session fetches (Phase 8), same rationale as
+# MAX_MEMORY_OPS: a within-turn step that doesn't pester the user, just
+# needs iteration slack so the model can read another session and then act.
+MAX_SESSION_READS = 3
+
 
 def run_turn(request: str, config: Config) -> None:
     """Handle one user request end to end, printing output as we go."""
@@ -43,9 +68,12 @@ def run_turn(request: str, config: Config) -> None:
     clarifications = 0
     command_steps = 0
 
-    # Loop guard: max_steps command steps + the clarification budget + a little
-    # slack, so a model that never converges still terminates cleanly.
-    for _ in range(config.max_steps + MAX_CLARIFICATIONS + 1):
+    # Loop guard: max_steps command steps + the clarification, memory-op and
+    # session-read budgets + a little slack, so a model that never converges
+    # still terminates cleanly.
+    for _ in range(
+        config.max_steps + MAX_CLARIFICATIONS + MAX_MEMORY_OPS + MAX_SESSION_READS + 1
+    ):
         decision = llm.call(messages, tools.TOOL_SCHEMAS, config, session_id)
 
         if decision.tool_name == "answer":
@@ -59,6 +87,21 @@ def run_turn(request: str, config: Config) -> None:
                 final_answer = aborted
                 break
             clarifications += 1
+            _append_tool_result(messages, decision, observation)
+            continue
+
+        if decision.tool_name in ("remember", "forget"):
+            observation = _handle_memory(decision.tool_name, decision.args, steps)
+            _append_tool_result(messages, decision, observation)
+            continue
+
+        if decision.tool_name == "change_dir":
+            observation = _handle_change_dir(decision.args, session_id, steps)
+            _append_tool_result(messages, decision, observation)
+            continue
+
+        if decision.tool_name == "read_session":
+            observation = _handle_read_session(decision.args, session_id, steps)
             _append_tool_result(messages, decision, observation)
             continue
 
@@ -181,6 +224,87 @@ def _handle_ask_user(args: dict, clarifications: int, steps: list) -> tuple:
             None,
         )
     return f"The user answered: {reply}", None
+
+
+def _handle_memory(tool_name: str, args: dict, steps: list) -> str:
+    """Apply one remember/forget decision and report the result to the model.
+
+    A memory op is a within-turn step (like ask_user): it does not consume
+    a command step and the loop continues, so the model can store a fact
+    AND run a command or answer in the same turn. The observation returned
+    here is fed back to the LPU as the tool result; the step is recorded in
+    session history for the report/audit trail.
+    """
+    if tool_name == "remember":
+        fact = args.get("fact", "").strip()
+        if not fact:
+            steps.append({"tool": "remember", "args": args, "error": "empty fact"})
+            return "Nothing to remember: the fact was empty."
+        record = state.add_memory(fact)
+        print(f"· remembered [{record['id']}]: {fact}", file=sys.stderr)
+        steps.append({"tool": "remember", "args": args, "memory_id": record["id"]})
+        return f"Stored as memory {record['id']}: {fact}"
+
+    # forget
+    memory_id = args.get("id", "")
+    removed = state.forget_memory(memory_id)
+    print(
+        f"· forgot {memory_id}" if removed else f"· no memory {memory_id} to forget",
+        file=sys.stderr,
+    )
+    steps.append({"tool": "forget", "args": args, "removed": removed})
+    if removed:
+        return f"Forgot memory {memory_id}."
+    return f"There is no memory with id {memory_id} to forget."
+
+
+def _handle_change_dir(args: dict, session_id: str, steps: list) -> str:
+    """Validate a change_dir target and hand it off to the shell wrapper.
+
+    A within-turn step, like remember/forget: it does not consume a
+    command step, so the model can cd AND run a command or remember
+    something in the same turn. Nothing here touches this process's own
+    cwd — the doit() shell function reads the written file and performs
+    the real cd after this process exits (D1's cd-trap fix).
+    """
+    path = args.get("path", "")
+    result = tools.resolve_change_dir(path)
+    if result.error:
+        print(f"· {result.error}", file=sys.stderr)
+        steps.append({"tool": "change_dir", "args": args, "error": result.error})
+        return result.error
+
+    state.write_cd_target(session_id, result.resolved_path)
+    print(f"· will cd to {result.resolved_path} after this run", file=sys.stderr)
+    steps.append({"tool": "change_dir", "args": args, "resolved_path": result.resolved_path})
+    return (
+        f"Directory will change to {result.resolved_path} once doit exits — "
+        f"NOT yet. Do NOT run a follow-up command (e.g. ls) unless the "
+        f"user's request explicitly asked to see/list what's there — if the "
+        f"request was only to go to this directory, call answer now to "
+        f"confirm and stop. If a follow-up command IS warranted, target "
+        f"{result.resolved_path} explicitly (e.g. `ls {result.resolved_path}`), "
+        f"do not run a bare command assuming you're already there."
+    )
+
+
+def _handle_read_session(args: dict, current_session_id: str, steps: list) -> str:
+    """Fetch another session's full history and feed it back to the model.
+
+    A within-turn step (Phase 8, Decision 10c): the model asked to see one
+    specific OTHER terminal in detail because the always-injected one-line
+    summary was too thin to reproduce the referenced task. It does not
+    consume a command step, so the model can read the other session and
+    then act (e.g. re-run its folder task here) in the same turn. The
+    detail (or an explanatory message when the id is unknown/self/empty) is
+    rendered by context.render_session_detail and fed back as the tool
+    result; the fetch is recorded in history for the report/audit trail.
+    """
+    target = args.get("session_id", "")
+    detail = context.render_session_detail(target, current_session_id)
+    print(f"· read session {target}", file=sys.stderr)
+    steps.append({"tool": "read_session", "args": args})
+    return detail
 
 
 def _prompt_user(question: str, options: list) -> str:
