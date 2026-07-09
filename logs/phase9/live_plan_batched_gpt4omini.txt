@@ -1,0 +1,57 @@
+### Phase 9 live re-verification AFTER the P9e fix (PLAN_SLACK 2->3 +
+### system-prompt batching nudge). Same request pattern, fresh random files
+### each run, model=openai/gpt-4o-mini adapter=native.
+
+## Run A (session live_check2_<pid>, cwd=/tmp/doit_p9_test2)
+$ find . -maxdepth 1 -name '*.log' -exec du -h {} + | sort -hr | head -n 3
+Plan:
+  1. find the 3 largest .log files in /private/tmp/doit_p9_test2
+  2. gzip each of the found files
+880K	./d.log
+492K	./b.log
+100K	./a.log
+⚠ This command modifies the filesystem:
+    gzip ./d.log ./b.log ./a.log
+  gzip the 3 largest .log files found.
+Proceed? [y/N] y
+$ gzip ./d.log ./b.log ./a.log
+The 3 largest .log files have been successfully gzipped.
+-- files after: a.log.gz b.log.gz c.log d.log.gz (c.log correctly untouched, all 3 real targets done)
+
+## Run B (session live_check3_<pid>, cwd=/tmp/doit_p9_test3)
+(model asked a clarifying question first this time -- "sort by size or by
+modification time?" -- composes fine with plan/retry, not a Phase 9 change)
+$ ls -S *.log | head -n 3
+Plan:
+  1. find the 3 largest .log files here by size
+  2. gzip each of the found .log files
+d.log
+b.log
+a.log
+Proceed? [y/N] y
+$ gzip d.log b.log a.log
+The 3 largest .log files have been successfully gzipped.
+-- files after: a.log.gz b.log.gz c.log d.log.gz (correct again, batched again)
+
+## Run C -- recovery-stop, empty directory (session live_check4_<pid>)
+$ ls -S *.log | head -n 3
+zsh:1: no matches found: *.log
+Plan:
+  1. find the 3 largest .log files in the current directory
+  2. gzip each of the found .log files
+There are no .log files in the current directory to find and gzip.
+-- BONUS finding: the zsh glob failure ("no matches found") IS a real
+-- rc!=0 (unlike the pipe-masked case above), so retry fired here; the
+-- model's next decision was `answer`, correctly concluding "no files
+-- exist" from the glob failure rather than retrying uselessly or crashing.
+
+## Run D -- retry, genuine BSD/GNU stat mismatch (session live_check5_<pid>)
+$ stat --format='%y' a.log
+stat: illegal option -- -
+usage: stat [-FLnq] [-f format | -l | -r | -s | -x] [-t timefmt] [file ...]
+doit: command exited with code 1
+The `stat` command on macOS does not support the `--format` option. Instead,
+you can use `stat -f '%m' a.log` to get the last modified time of the file.
+-- retry fired (rc=1 on the illegal option); this run the model chose to
+-- EXPLAIN the fix via answer rather than re-run the corrected command
+-- itself -- both are valid uses of the granted retry slot.

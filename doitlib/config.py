@@ -11,6 +11,15 @@ at all. Switching the model is a one-line edit:
 tool-calling API (gpt-4o-mini, mistral:7b); "prompted" hand-rolls the
 tool protocol in the system prompt for models without tool-calling
 (llama3:8b). See doitlib/llm.py.
+
+`enable_plans` (Phase 9, DECISIONS.md D11) gates the `plan(steps[])`
+tool per MODEL, on capability rather than adapter: leave it `true` for
+a model competent enough to carry out a multi-step plan without
+supervision drift (gpt-4o-mini), set it `false` for weaker ~4B locals
+(qwen3:4b native or gemma3:4b prompted) — either adapter can mechanically
+run a plan, the risk is the model losing the thread over several steps.
+Retry (one corrective attempt after a failed command) is NOT gated —
+it is always on, for every model.
 """
 
 import configparser
@@ -31,6 +40,7 @@ class Config:
     max_steps: int = 1  # 1 = single-command mode (Phase 1)
     command_timeout_seconds: int = 30
     shell: str = ""  # path to the shell for running commands; "" = auto-detect
+    enable_plans: bool = True  # capability gate for the plan() tool (Phase 9, D11)
 
 
 def load_config() -> Config:
@@ -47,6 +57,7 @@ def load_config() -> Config:
             "command_timeout_seconds", config.command_timeout_seconds
         )
         config.shell = section.get("shell", config.shell)
+        config.enable_plans = section.getboolean("enable_plans", config.enable_plans)
     return config
 
 

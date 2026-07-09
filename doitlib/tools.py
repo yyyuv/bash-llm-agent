@@ -10,6 +10,8 @@ codes against (PLAN.md §1). The tools grow by phase:
     forget        delete a stored fact by its id                   (Phase 6)
     change_dir    change the shell's cwd via the shell wrapper (D1)
     read_session  fetch another terminal's history in full         (Phase 8)
+    plan          announce a multi-step plan, raising this turn's
+                  command budget                                   (Phase 9)
 
 Schemas use the OpenAI function-calling format, which LiteLLM accepts
 for every provider.
@@ -236,7 +238,63 @@ TOOL_SCHEMAS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "plan",
+            "description": (
+                "Announce a multi-step plan BEFORE carrying it out, for a "
+                "request that genuinely needs more than one command (e.g. "
+                "find something, then act on what you found). This does "
+                "NOT run anything and does NOT end the turn: after "
+                "announcing, continue exactly as usual, one run_command at "
+                "a time, reading each command's real output before writing "
+                "the next one — do NOT pre-guess exact values (filenames, "
+                "counts) that depend on an earlier step's result. Each "
+                "step still goes through the normal destructive "
+                "confirmation individually; announcing the plan is a "
+                "preview for the user, not a blanket authorization. If an "
+                "early step finds nothing, or fails in a way that makes "
+                "the rest pointless, STOP: use answer to report that "
+                "instead of running the remaining steps blindly. Only use "
+                "this when you actually intend more than one command — a "
+                "single command never needs a plan."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "steps": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Short descriptions of each planned step, in "
+                            "order, e.g. ['find the 3 largest .log files "
+                            "under ~/projects', 'show them to the user', "
+                            "'gzip each one']. Plain-English previews, not "
+                            "literal shell commands."
+                        ),
+                    },
+                },
+                "required": ["steps"],
+            },
+        },
+    },
 ]
+
+# Phase 9 (D11): plans are capability-gated per model via config.enable_plans
+# — the tool schema itself is withheld from a model that shouldn't get it
+# (rather than offered and relied on the model to decline), so a weak model
+# never even sees the option. This is the actual enforcement point; the
+# defensive check in controller._handle_plan only covers a model that
+# hallucinates the tool despite never being told about it.
+_PLAN_TOOL_NAME = "plan"
+
+
+def tool_schemas_for(config) -> list:
+    """Return the tool schemas to offer this turn, gated by config.enable_plans."""
+    if config.enable_plans:
+        return TOOL_SCHEMAS
+    return [s for s in TOOL_SCHEMAS if s["function"]["name"] != _PLAN_TOOL_NAME]
 
 
 @dataclass
