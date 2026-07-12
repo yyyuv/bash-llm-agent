@@ -245,7 +245,11 @@ def _confirm_destructive(command: str, explanation: str) -> bool:
     print("⚠ This command modifies the filesystem:")
     print(f"    {command}")
     print(f"  {explanation}")
-    answer = input("Proceed? [y/N] ").strip().lower()
+    try:
+        answer = input("Proceed? [y/N] ").strip().lower()
+    except EOFError:
+        print()  # abort on no input (treat EOF as N), per D8
+        return False
     return answer in ("y", "yes")
 
 

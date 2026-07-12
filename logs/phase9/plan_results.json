@@ -55,7 +55,7 @@
     {
       "case": "loop_plan_destructive_step_still_gated",
       "pass": true,
-      "detail": "turn={'ts': 1783583047.516314, 'cwd': '/Users/yuvalreuveni/Documents/Claude/Projects/assingment3/bash-llm-agent', 'request': 'delete junk.txt after listing it', 'steps': [{'tool': 'plan', 'args': {'steps': ['list junk files', 'delete them']}, 'command_budget': 5}, {'tool': 'run_command', 'args': {'command': 'rm junk.txt', 'is_destructive': True, 'explanation': 'delete the junk file'}, 'blocked_reason': 'declined_by_user', 'guard_overrode_model': False, 'stdout': '', 'stderr': '', 'rc': None}], 'final_answer': 'Aborted. (Nothing was executed.)'}"
+      "detail": "turn={'ts': 1783865341.65932, 'cwd': '/Users/yuvalreuveni/Documents/Claude/Projects/assingment3/bash-llm-agent', 'request': 'delete junk.txt after listing it', 'steps': [{'tool': 'plan', 'args': {'steps': ['list junk files', 'delete them']}, 'command_budget': 5}, {'tool': 'run_command', 'args': {'command': 'rm junk.txt', 'is_destructive': True, 'explanation': 'delete the junk file'}, 'blocked_reason': 'declined_by_user', 'guard_overrode_model': False, 'stdout': '', 'stderr': '', 'rc': None}], 'final_answer': 'Aborted. (Nothing was executed.)'}"
     },
     {
       "case": "loop_retry_after_failure_default_single_command",

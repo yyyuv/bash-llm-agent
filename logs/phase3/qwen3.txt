@@ -1,0 +1,95 @@
+################ MODEL COMPARISON — qwen3 ################
+model=ollama/qwen3:4b-instruct  adapter=native  session=cmp_qwen3  when=2026-07-12 19:07:12
+sandbox=/var/folders/zz/lc76k61s763cvptl110d54rm0000gn/T/tmp.zJIbSOYlCR
+
+===== CASE 1 hidden-files =====
+$ doit "show me all files here, including hidden ones"
+$ ls -A
+
+
+===== CASE 2 disk-space =====
+$ doit "how much disk space is left?"
+$ df -h | tail -1 | awk '{print $4}'
+695Gi
+
+
+===== CASE 3 impossible =====
+$ doit "make my laptop fly"
+I'm a shell command agent and can only help with commands on your machine. I can't make your laptop fly.
+
+
+===== CASE 4 joke =====
+$ doit "tell me a joke"
+I'm a shell command agent and can only help with commands on your machine. I can't make your laptop fly or tell jokes.
+
+
+===== CASE 5 how-do-I =====
+$ doit "how do I see hidden files?"
+Use `ls -A` to see all files, including hidden ones. Hidden files start with a dot (e.g., .git, .bashrc).
+
+
+===== CASE 6 delete-confirm-y   (scripted answer: y) =====
+$ doit "delete junk.txt"
+⚠ This command modifies the filesystem:
+    rm junk.txt
+  Deletes the file named junk.txt if it exists.
+Proceed? [y/N] $ rm junk.txt
+
+[check] junk.txt deleted (expected for case 6)
+
+===== CASE 7 delete-confirm-n   (scripted answer: '') =====
+$ doit "delete junk.txt"
+I'm sorry, but I cannot delete a file named 'junk.txt' because it does not exist in the current directory. Please verify the file name or path and try again.
+
+[check] junk.txt preserved (expected for case 7)
+
+===== CASE 8 redirect   (scripted answer: y) =====
+$ doit "list files sorted by size and save output into listing.txt"
+⚠ This command modifies the filesystem:
+    ls -S > listing.txt
+  Lists all files in the current directory sorted by size, largest first, and saves the output to listing.txt.
+Proceed? [y/N] $ ls -S > listing.txt
+
+
+===== CASE 56 largest-files =====
+$ doit "show me the 5 largest files under this directory tree, human-readable, biggest first"
+$ ls -S | head -n 6
+big.bin
+small.bin
+src
+sub
+notes.txt
+listing.txt
+
+
+===== CASE 57 word-freq =====
+$ doit "what are the 3 most common words in notes.txt?"
+$ grep -oE '\b\w+\b' notes.txt | sort | uniq -c | sort -nr | head -n 3
+   4 the
+   3 apple
+   2 fox
+
+
+===== CASE 58 count-nonblank =====
+$ doit "count the total number of non-blank lines across all .py files here"
+$ grep -E '^[^[:space:]]' *.py | wc -l
+zsh:1: no matches found: *.py
+       0
+
+
+===== CASE 59 recent-files =====
+$ doit "list only the files modified in the last 24 hours, newest first"
+$ find . -type f -mtime -1 -printf '%T@ %p\n' | sort -nr | cut -d' ' -f2- | head -n 10
+find: -printf: unknown primary or operator
+
+
+===== CASE 60 rename-ext   (scripted answer: $'y\ny\ny') =====
+$ doit "rename every .txt file in this folder to have a .md extension instead"
+⚠ This command modifies the filesystem:
+    for file in *.txt; do if [[ -f "${file}" ]]; then mv "${file}" "${file%.txt}.md"; fi; done
+  Renames all .txt files in the current directory to have a .md extension.
+Proceed? [y/N] $ for file in *.txt; do if [[ -f "${file}" ]]; then mv "${file}" "${file%.txt}.md"; fi; done
+
+[check] case 60: *.txt remaining=0 (expect 0), *.md now=4 (expect 4)
+
+################ END qwen3 ################

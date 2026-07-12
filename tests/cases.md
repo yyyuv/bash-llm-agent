@@ -71,6 +71,31 @@ tests, not re-run per model. What to watch for and write up per model:
 | 6 | `doit "delete junk.txt"`, `y` | is `is_destructive` self-flagged true? (guard rescues it if not) |
 | 8 | `doit "list files ... save output into listing.txt"` | redirect self-flagged destructive? guard-override rate per model |
 
+**Hard discriminator cases 56–60** — appended to the same
+`run_model_comparison.sh` harness (after case 8), designed so the ~4B locals
+*fail on command quality* while gpt-4o-mini holds up. The harness forces
+`enable_plans = false` for every model, so this is a pure single-command
+translation test: one command, right or wrong, no multi-step orchestration to
+hide behind. The sandbox is seeded first with a known fixture (word counts and
+byte sizes chosen so the correct output is unambiguous), so a wrong command
+yields a *visibly* wrong answer, not just different syntax. Expected correct
+command (what a strong model emits) shown for reference; watch whether each
+local model composes the same multi-stage pipeline.
+
+| # | invocation | correct single command | where weak models fail |
+|---|---|---|---|
+| 56 | `doit "show me the 5 largest files under this directory tree, human-readable, biggest first"` | `du -ah . \| sort -rh \| head -5` | reach for `ls -lS` (doesn't recurse) or drop `sort -rh`/`-h`, so the ordering or human-readable sizes are wrong |
+| 57 | `doit "what are the 3 most common words in notes.txt?"` | `tr -s ' ' '\n' < notes.txt \| sort \| uniq -c \| sort -rn \| head -3` → `the`(4), `apple`(3), … | drop a pipeline stage (no `sort` before `uniq -c`, or no second numeric `sort -rn`), producing wrong counts/order |
+| 58 | `doit "count the total number of non-blank lines across all .py files here"` | `grep -rvc '^$' --include='*.py' . \| awk -F: '{s+=$2} END{print s}'` → `5` | forget the non-blank filter (count all lines), or fail to sum across files (report per-file numbers) |
+| 59 | `doit "list only the files modified in the last 24 hours, newest first"` | `find . -type f -mtime -1` (+ sort) | emit `ls -lt` alone (sorts but does NOT filter to 24h) or botch BSD/GNU `-mtime`/`-newermt` |
+| 60 | `doit "rename every .txt file in this folder to have a .md extension instead"`, `y` | `for f in *.txt; do mv -- "$f" "${f%.txt}.md"; done` (destructive → `y/N` gate) | emit the broken `mv *.txt *.md`, or `rename` (not on macOS), or mangle the `${f%.txt}` suffix strip |
+
+Case 60 runs in its own clean subdir seeded with exactly 4 `.txt` files (the
+sandbox root has stray `.txt` files by then — `junk.txt` from case 7's abort,
+`listing.txt` from case 8's redirect — which would make "this folder"
+ambiguous). The harness prints a `[check]` line after case 60 (`*.txt
+remaining=0, *.md now=4`) so a wrong rename is caught mechanically, not by eye.
+
 **Prompted-adapter offline unit tests** (`tests/prompted_adapter_tests.py`, no
 Ollama needed) — layer-1 (model) failing, layer-2 (our parser) recovering:
 

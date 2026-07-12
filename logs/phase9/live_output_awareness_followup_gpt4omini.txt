@@ -1,0 +1,216 @@
+Output awareness via a follow-up command — live transcript (REPORT_TODO C9)
+Model: openai/gpt-4o-mini (native adapter)
+Date: 2026-07-12
+Terminal: real zsh session, neutral sandbox (generic ambiguous filenames, no repo internals)
+Sandbox files (names deliberately uninformative so the answer can't be guessed
+from the name alone; sizes span 2 B .. 3 MB):
+    backup.tmp  (3.0 MB, binary "data")
+    cache.bin   (2.0 MB, binary "data")
+    core        (23 B, ASCII text)   <- sounds like a coredump, is text
+    data        (12 B, ASCII text)   <- no extension
+    notes       (2 B,  ASCII text)
+    output      (28 B, ASCII text)   <- named "output", is real content
+
+Why this run exists: every prior output-awareness log answers the question
+DIRECTLY (an `answer` tool call reading earlier output). C9 needed the strong
+variant -- the model faced with a question it CANNOT answer from what it sees,
+so it runs ANOTHER command (file/du) to find out, then answers. The sandbox is
+built so filenames alone are ambiguous and inspection genuinely pays off.
+
+================================================================================
+RUN A  (DOIT_SESSION=c9demonew ; ~/doit.cfg had enable_plans=false, max_steps=1)
+Single-command mode, plans OFF. Shows both the C9 behavior AND a real
+single-command-mode limitation.
+================================================================================
+
+$ doit "list the files here"
+$ ls
+backup.tmp
+cache.bin
+core
+data
+notes
+output
+
+$ doit "which of these files look safe to delete? check their types and sizes if you're unsure"
+$ file backup.tmp
+backup.tmp: data
+
+    ^^ C9 SATISFIED: the model responded to an output-awareness question by
+       RUNNING A COMMAND (file), not by answering blind.
+
+$ doit "I don't want to guess from names — inspect the actual file types and sizes, then tell me which are safe to delete"
+$ du -h backup.tmp
+2.9M    backup.tmp
+
+$ doit "i want you to check all files and decide after you checked their types and sizes and maybe creation dates"
+$ du -h backup.tmp
+2.9M    backup.tmp
+
+$ doit "did you check all files?"
+$ du -h cache.bin
+1.9M    cache.bin
+
+$ doit "its a yes/no question"
+No, I have not checked all files yet. I will continue checking the remaining files now.
+
+$ doit "check the remaining files now"
+$ du -h core
+4.0K    core
+
+    ^^ LIMITATION (single-command mode): with max_steps=1 and plans OFF the
+       model can only run ONE command per turn, so it inspected ONE FILE AT A
+       TIME, flailed, and never reached a verdict on its own -- it even lost
+       track of its own progress ("No, I have not checked all files yet").
+
+$ doit "inspect ALL of them in one go — run file and sizes on every file at once, don't do them one at a time"
+$ du -h * && file *
+2.9M    backup.tmp
+1.9M    cache.bin
+4.0K    core
+4.0K    data
+4.0K    notes
+4.0K    output
+backup.tmp: data
+cache.bin:  data
+core:       ASCII text
+data:       ASCII text
+notes:      ASCII text
+output:     ASCII text
+
+    ^^ Told explicitly to batch, it emitted ONE command covering every file.
+       Whether it batches or goes one-at-a-time is non-deterministic in
+       single-command mode -- that variability is the honest limitation, NOT
+       a plans-on-vs-off effect (plans were never invoked in this run).
+
+$ doit "good — now, based on what you just saw, which are safe to delete?"
+Based on the file types and sizes:
+- **backup.tmp** (2.9M) and **cache.bin** (1.9M) are data files and may contain important information, so it's best to keep them unless you are sure they are not needed.
+- **core**, **data**, **notes**, and **output** (all 4.0K) are ASCII text files and are small in size, making them less critical.
+
+If you need to free up space, you can consider deleting **core**, **data**, **notes**, and **output**. However, ensure that you do not need any of these files before deleting them.
+
+================================================================================
+RUN B  (DOIT_SESSION=c9demonewallowplan ; ~/doit.cfg had enable_plans=true)
+Same task, plans available. Confirmed against ~/.doit/sessions/c9demonewallowplan.jsonl.
+================================================================================
+
+$ doit "list the files here"
+$ ls
+backup.tmp
+cache.bin
+core
+data
+notes
+output
+
+$ doit "which of these files look safe to delete? check their types and sizes if you're unsure"
+$ file backup.tmp cache.bin core data notes output
+backup.tmp: data
+cache.bin:  data
+core:       ASCII text
+data:       ASCII text
+notes:      ASCII text
+output:     ASCII text
+
+    ^^ Even with plans ENABLED, the model did NOT call `plan` here -- it used a
+       single `run_command` (batched `file` over all six files). Correct: this
+       task is inspect-once-then-answer, not genuinely multi-step. Plans stay
+       dormant when they aren't needed.
+
+$ doit "so based on that, which are safe to delete?"
+Based on the file types and sizes:
+- `backup.tmp` and `cache.bin` are data files, which may contain important information depending on their purpose.
+- `core`, `data`, `notes`, and `output` are ASCII text files, which might also contain valuable information.
+
+Without knowing the specific content and purpose of these files, it's difficult to definitively say which are safe to delete. However, if you are looking to free up space, you might consider deleting `backup.tmp` and `cache.bin` if you don't need temporary data files. Always ensure to back up important files before deletion.
+
+--- Forcing the multi-step path: the `plan` tool now genuinely engages ---
+
+$ doit "use a plan to list all files, sort them and investigate them to decide which is the safest to delete"
+Plan:
+  1. list all files in the current directory
+  2. sort the files by size
+  3. check the types and sizes of the files to determine which are safe to delete
+$ ls -l
+total 9808
+-rw-r--r--@ 1 yuvalreuveni  wheel  3000000 Jul 12 17:48 backup.tmp
+-rw-r--r--@ 1 yuvalreuveni  wheel  2000000 Jul 12 17:48 cache.bin
+-rw-r--r--@ 1 yuvalreuveni  wheel       23 Jul 12 17:48 core
+-rw-r--r--@ 1 yuvalreuveni  wheel       12 Jul 12 17:48 data
+-rw-r--r--@ 1 yuvalreuveni  wheel        2 Jul 12 17:48 notes
+-rw-r--r--@ 1 yuvalreuveni  wheel       28 Jul 12 17:48 output
+$ ls -lS
+total 9808
+-rw-r--r--@ 1 yuvalreuveni  wheel  3000000 Jul 12 17:48 backup.tmp
+-rw-r--r--@ 1 yuvalreuveni  wheel  2000000 Jul 12 17:48 cache.bin
+-rw-r--r--@ 1 yuvalreuveni  wheel       28 Jul 12 17:48 output
+-rw-r--r--@ 1 yuvalreuveni  wheel       23 Jul 12 17:48 core
+-rw-r--r--@ 1 yuvalreuveni  wheel       12 Jul 12 17:48 data
+-rw-r--r--@ 1 yuvalreuveni  wheel        2 Jul 12 17:48 notes
+$ file backup.tmp cache.bin core data notes output
+backup.tmp: data
+cache.bin:  data
+core:       ASCII text
+data:       ASCII text
+notes:      ASCII text
+output:     ASCII text
+Based on the file types and sizes:
+- `backup.tmp` (3,000,000 bytes) and `cache.bin` (2,000,000 bytes) are large data files, which may contain important information depending on their purpose.
+- `core` (23 bytes), `data` (12 bytes), `notes` (2 bytes), and `output` (28 bytes) are small ASCII text files, which might also contain valuable information.
+
+Given their sizes, `core`, `data`, `notes`, and `output` are likely safer to delete if you need to free up space, as they are much smaller. However, ensure to back up any important files before deletion.
+
+    ^^ PHASE 9 PLAN MECHANISM, PROVEN LIVE: session jsonl shows one turn with
+       tools = [plan, run_command, run_command, run_command, <answer>] -- i.e.
+       THREE run_commands executed in a SINGLE turn despite max_steps=1. The
+       `plan` tool lifted the single-command budget exactly as designed, and
+       each command's real output fed the next (ls -l -> ls -lS -> file).
+
+$ doit "list all files, sort them and investigate them to decide which is the safest to delete"
+Plan:
+  1. list all files with detailed information
+  2. sort the files by size
+  3. check the types and sizes of each file to determine which is safest to delete
+$ ls -l
+... (same listing) ...
+$ ls -lS
+... (same sorted listing) ...
+$ file backup.tmp cache.bin core data notes output
+backup.tmp: data
+cache.bin:  data
+core:       ASCII text
+data:       ASCII text
+notes:      ASCII text
+output:     ASCII text
+Which files would you like to delete? You can choose from: backup.tmp, cache.bin, core, data, notes, output.
+Your answer: none
+No files will be deleted as per your choice. If you need further assistance, feel free to ask!
+
+    ^^ BONUS COMPOSITION: session jsonl for this turn =
+       [plan, run_command, run_command, run_command, ask_user, <answer>] --
+       plan + a 3-command investigation + an ask_user clarification, all in one
+       turn, ending on the user's "none".
+
+================================================================================
+FINDINGS
+================================================================================
+1. C9 SATISFIED. The model answers output-awareness questions ("which is safe
+   to delete?") by RUNNING a follow-up command (file/du) to gather facts, not
+   by guessing from filenames. (Run A turn 2; Run B turn 2.)
+
+2. PLANS ENGAGE ONLY WHEN NEEDED, AND PROVABLY LIFT max_steps=1. Plain "which
+   is safe?" never triggers `plan` (one command suffices). Explicit multi-step
+   phrasing does: the `plan` tool fires and multiple run_commands execute in a
+   single turn (verified in the session jsonl), with real output feeding the
+   next command. Run B also shows plan + ask_user composed in one turn.
+
+3. LIMITATION -- single-command mode is non-deterministic about batching. With
+   plans OFF (Run A), the model sometimes inspects one file per turn and never
+   concludes on its own; it needed an explicit "do them all at once" nudge.
+
+4. LIMITATION -- shaky judgment. Across all runs the delete verdict was
+   inconsistent and reasoned purely from `file` type + byte size, ignoring the
+   obvious name cues (backup.tmp / cache.bin are literally the disposable junk).
+   Gathering facts via a follow-up command is NOT the same as good judgment
+   about what matters.

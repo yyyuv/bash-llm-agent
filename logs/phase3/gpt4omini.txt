@@ -1,0 +1,108 @@
+################ MODEL COMPARISON — gpt4omini ################
+model=openai/gpt-4o-mini  adapter=native  session=cmp_gpt4omini  when=2026-07-12 19:06:18
+sandbox=/var/folders/zz/lc76k61s763cvptl110d54rm0000gn/T/tmp.Qlmtdu9drp
+
+===== CASE 1 hidden-files =====
+$ doit "show me all files here, including hidden ones"
+$ ls -la
+total 0
+drwx------@    2 yuvalreuveni  staff      64 Jul 12 19:06 .
+drwx------@ 4293 yuvalreuveni  staff  137376 Jul 12 19:06 ..
+
+
+===== CASE 2 disk-space =====
+$ doit "how much disk space is left?"
+$ df -h .
+Filesystem      Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s5   926Gi   185Gi   695Gi    22%    2.6M  7.3G    0%   /System/Volumes/Data
+
+
+===== CASE 3 impossible =====
+$ doit "make my laptop fly"
+I'm a shell command agent and cannot help with that!
+
+
+===== CASE 4 joke =====
+$ doit "tell me a joke"
+I'm a shell command agent and cannot help with that!
+
+
+===== CASE 5 how-do-I =====
+$ doit "how do I see hidden files?"
+To see hidden files in the terminal, you can use the command `ls -a`. This will list all files, including those that start with a dot (.) which are considered hidden.
+
+
+===== CASE 6 delete-confirm-y   (scripted answer: y) =====
+$ doit "delete junk.txt"
+⚠ This command modifies the filesystem:
+    rm junk.txt
+  This command will delete the file named junk.txt.
+Proceed? [y/N] $ rm junk.txt
+
+[check] junk.txt deleted (expected for case 6)
+
+===== CASE 7 delete-confirm-n   (scripted answer: '') =====
+$ doit "delete junk.txt"
+Are you sure you want to delete junk.txt? This action cannot be undone. Please confirm with 'y' to proceed.
+Your answer: ⚠ This command modifies the filesystem:
+    rm junk.txt
+  This command deletes the file junk.txt.
+Proceed? [y/N] 
+Aborted. (Nothing was executed.)
+
+[check] junk.txt preserved (expected for case 7)
+
+===== CASE 8 redirect   (scripted answer: y) =====
+$ doit "list files sorted by size and save output into listing.txt"
+⚠ This command modifies the filesystem:
+    ls -laS > listing.txt
+  Lists all files sorted by size and saves the output into listing.txt.
+Proceed? [y/N] $ ls -laS > listing.txt
+
+
+===== CASE 56 largest-files =====
+$ doit "show me the 5 largest files under this directory tree, human-readable, biggest first"
+$ find . -type f -exec du -h {} + | sort -hr | head -n 5
+120K	./big.bin
+ 40K	./sub/mid.bin
+8.0K	./small.bin
+4.0K	./src/two.py
+4.0K	./src/one.py
+
+
+===== CASE 57 word-freq =====
+$ doit "what are the 3 most common words in notes.txt?"
+$ tr -c '[:alnum:]' '[\n]' < notes.txt | sort | uniq -c | sort -nr | head -n 3
+   1 the]quick]brown]fox]the]lazy]dog]the]fox]the]end]apple]banana]apple]cherry]apple]banana]
+
+
+===== CASE 58 count-nonblank =====
+$ doit "count the total number of non-blank lines across all .py files here"
+$ find . -name '*.py' -exec grep -cve '^[[:space:]]*$' {} + | awk '{s+=$1} END {print s}'
+0
+
+
+===== CASE 59 recent-files =====
+$ doit "list only the files modified in the last 24 hours, newest first"
+$ find . -type f -mtime -1 -ls | sort -k 7,7r
+27189876      240 -rw-r--r--    1 yuvalreuveni     staff              122880 Jul 12 19:06 ./big.bin
+27189877       80 -rw-r--r--    1 yuvalreuveni     staff               40960 Jul 12 19:06 ./sub/mid.bin
+27189878       16 -rw-r--r--    1 yuvalreuveni     staff                5120 Jul 12 19:06 ./small.bin
+27189872        8 -rw-r--r--    1 yuvalreuveni     staff                 266 Jul 12 19:06 ./listing.txt
+27189875        8 -rw-r--r--    1 yuvalreuveni     staff                  88 Jul 12 19:06 ./notes.txt
+27189879        8 -rw-r--r--    1 yuvalreuveni     staff                  36 Jul 12 19:06 ./src/one.py
+27189880        8 -rw-r--r--    1 yuvalreuveni     staff                  13 Jul 12 19:06 ./src/two.py
+27189864        0 -rw-r--r--    1 yuvalreuveni     staff                   0 Jul 12 19:06 ./junk.txt
+
+
+===== CASE 60 rename-ext   (scripted answer: $'y\ny\ny') =====
+$ doit "rename every .txt file in this folder to have a .md extension instead"
+Are you sure you want to rename all .txt files to .md? This action cannot be undone. Please confirm with 'y' to proceed.
+Your answer: ⚠ This command modifies the filesystem:
+    for file in *.txt; do mv "$file" "${file%.txt}.md"; done
+  This command renames every .txt file in the current folder to have a .md extension instead.
+Proceed? [y/N] $ for file in *.txt; do mv "$file" "${file%.txt}.md"; done
+
+[check] case 60: *.txt remaining=0 (expect 0), *.md now=4 (expect 4)
+
+################ END gpt4omini ################

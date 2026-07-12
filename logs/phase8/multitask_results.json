@@ -25,7 +25,7 @@
     {
       "case": "summary_content",
       "pass": true,
-      "detail": "summary={'id': 's1', 'ts': 1783583045.933491, 'cwd': '/home/y', 'requests': ['second', 'third']}"
+      "detail": "summary={'id': 's1', 'ts': 1783865340.400851, 'cwd': '/home/y', 'requests': ['second', 'third']}"
     },
     {
       "case": "max_sessions_cap",

@@ -30,7 +30,7 @@
     {
       "case": "write_cd_target_creates_file",
       "pass": true,
-      "detail": "path=/var/folders/zz/lc76k61s763cvptl110d54rm0000gn/T/tmphgrq7g5a/cd_target_abc123"
+      "detail": "path=/var/folders/zz/lc76k61s763cvptl110d54rm0000gn/T/tmpuew_o7nx/cd_target_abc123"
     },
     {
       "case": "handle_valid_path",

@@ -1,0 +1,32 @@
+Runs from anywhere (invoked outside the repo) (REPORT_TODO C5)
+Model: openai/gpt-4o-mini (native adapter)
+Date: 2026-07-12
+Terminal: real zsh session, invoked from /tmp (NOT the project directory)
+DOIT_SESSION=c5anywhere
+
+Goal: show `doit` is a PATH tool that works from any directory, not just the
+project folder, and is aware of the cwd it was launched in.
+
+--- terminal session ---
+
+yuvalreuveni@yuvals-MacBook-Pro /tmp % set -a; source /Users/.../bash-llm-agent/.env; set +a
+yuvalreuveni@yuvals-MacBook-Pro /tmp % export DOIT_SESSION=c5anywhere
+yuvalreuveni@yuvals-MacBook-Pro /tmp % doit "what directory am I in?"
+
+You are currently in the `/private/tmp` directory.
+
+--- session jsonl ---
+(~/.doit/sessions/c5anywhere.jsonl)
+
+request:      what directory am I in?
+cwd:          /private/tmp
+tools:        []                         <- no command ran
+final_answer: You are currently in the `/private/tmp` directory.
+
+--- FINDINGS ---
+1. doit ran correctly from /tmp, a directory outside the project -- it is a
+   normal PATH executable, invocable from anywhere.
+2. It answered from the injected env/context block (which carries the real cwd),
+   not by running `pwd` (tools=[]). This doubly shows cwd-awareness: the context
+   block feeds the launch directory, and the agent used it directly rather than
+   spending a command.

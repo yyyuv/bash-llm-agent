@@ -1,0 +1,35 @@
+Dual-trigger: change_dir + remember in a single turn (REPORT_TODO C6)
+Model: openai/gpt-4o-mini (native adapter)
+Date: 2026-07-12
+Terminal: real zsh session, shell wrapper installed (prompt actually moves to doitlib/)
+DOIT_SESSION=c6dual
+
+The assignment's headline case: one English sentence that both moves the shell
+AND states a durable fact. The turn must fire TWO tools -- change_dir and
+remember -- in a single invocation (a within-turn compose, does not consume the
+single-command budget; DECISIONS P6c: remember first, then act).
+
+--- terminal session ---
+
+yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "cd into the doitlib folder — and by the way, this whole project is my university LLM course assignment"
+
+· will cd to /Users/yuvalreuveni/Documents/Claude/Projects/assingment3/bash-llm-agent/doitlib after this run
+· remembered [m4]: this whole project is my university LLM course assignment
+I've changed the directory to the doitlib folder for you. This project is noted as your university LLM course assignment.
+
+yuvalreuveni@yuvals-MacBook-Pro doitlib %          <- shell really moved (prompt changed)
+
+--- session jsonl proves both tools fired in one turn ---
+(~/.doit/sessions/c6dual.jsonl)
+
+request: cd into the doitlib folder — and by the way, this whole project is my university LLM course assignment
+cwd:     /Users/yuvalreuveni/Documents/Claude/Projects/assingment3/bash-llm-agent
+  tool=change_dir  args={"path": "doitlib"}
+  tool=remember    args={"fact": "this whole project is my university LLM course assignment"}
+final_answer: I've changed the directory to the doitlib folder for you. This project is noted as your university LLM course assignment.
+
+--- FINDINGS ---
+1. Both tools fired in one turn: ['change_dir', 'remember'] -- dual-trigger works.
+2. The real shell cwd changed (prompt bash-llm-agent % -> doitlib %), i.e. the
+   cd_target file written by change_dir was consumed by the shell wrapper.
+3. The durable fact was persisted as memory [m4]; the transient move was not.
