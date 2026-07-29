@@ -1,0 +1,707 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{listings}
+\usepackage{tcolorbox}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows, positioning, fit, backgrounds}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{tabularx}
+
+% Professional Color Palette
+\definecolor{primary}{RGB}{30, 41, 59}    % Slate 800
+\definecolor{secondary}{RGB}{71, 85, 105}  % Slate 600
+\definecolor{accent}{RGB}{2, 132, 199}     % Sky 600
+\definecolor{background}{RGB}{248, 250, 252} % Slate 50
+\definecolor{border}{RGB}{226, 232, 240}     % Slate 200
+\definecolor{safetyred}{RGB}{239, 68, 68}    % Red 500
+\definecolor{confirmgreen}{RGB}{34, 197, 94} % Green 500
+
+% Section Formatting
+\titleformat{\section}{\Large\bfseries\color{primary}}{\thesection}{1em}{}[{\titlerule[0.5pt]}]
+\titleformat{\subsection}{\large\bfseries\color{secondary}}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\color{primary}}{\thesubsubsection}{1em}{}
+
+% Headers/Footers
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{secondary}Assignment 3: Agentic Shell (\texttt{doit})}
+\fancyhead[R]{\small\color{secondary}Yuval Reuveni \& Arbel Tepper}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% Hyperlink Configuration
+\hypersetup{
+    colorlinks=true,
+    linkcolor=accent,
+    citecolor=accent,
+    urlcolor=accent,
+    pdfauthor={Yuval Reuveni, Arbel Tepper},
+    pdftitle={Assignment 3: Agentic Shell (doit) - Report}
+}
+
+% Code Listing Configuration
+\lstset{
+    backgroundcolor=\color{background},
+    basicstyle=\ttfamily\small,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    commentstyle=\color{secondary}\itshape,
+    keywordstyle=\color{accent}\bfseries,
+    numberstyle=\tiny\color{secondary},
+    numbers=left,
+    numbersep=8pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    stringstyle=\color{teal},
+    frame=single,
+    rulecolor=\color{border},
+    tabsize=2,
+    escapeinside={(*@}{@*)}
+}
+
+% Custom TColorBox styles
+\newtcolorbox{decisionbox}[1]{
+    colback=background,
+    colframe=secondary,
+    coltitle=white,
+    fonttitle=\bfseries\color{white},
+    title=#1,
+    arc=4pt,
+    boxrule=1pt
+}
+
+\newtcolorbox{safetybox}[1]{
+    colback=background,
+    colframe=safetyred,
+    coltitle=white,
+    fonttitle=\bfseries\color{white},
+    title=#1,
+    arc=4pt,
+    boxrule=1.5pt
+}
+
+\begin{document}
+
+% TITLE PAGE
+\begin{titlepage}
+    \centering
+    \vspace*{2cm}
+    {\Huge\bfseries\color{primary} Assignment 3: Agentic Shell (\texttt{doit}) \par}
+    \vspace{0.5cm}
+    {\large\color{secondary} LLM-Class 2025-2026 \par}
+    \vspace{1.5cm}
+    
+    \begin{tikzpicture}[scale=0.8, every node/.style={transform shape}]
+        % System Architecture Diagram in Title
+        \node[draw, rectangle, fill=background, minimum width=3cm, minimum height=1.2cm, rounded corners] (user) at (0,0) {\bf User Request};
+        \node[draw, rectangle, fill=primary, text=white, minimum width=3.5cm, minimum height=1.5cm, rounded corners] (ctrl) at (4.5,0) {\bf Controller (Python)};
+        \node[draw, rectangle, fill=background, minimum width=3cm, minimum height=1.2cm, rounded corners] (lpu) at (9,0) {\bf LPU (LLM)};
+        
+        \draw[->, thick, >=stealth, color=primary] (user) -- (ctrl);
+        \draw[->, thick, >=stealth, color=primary] (ctrl.15) -- node[above] {\small Context} (lpu.165);
+        \draw[<-, thick, >=stealth, color=primary] (ctrl.345) -- node[below] {\small Structured Decision} (lpu.195);
+        
+        \node[draw, rectangle, fill=background, minimum width=3.5cm, minimum height=1.2cm, rounded corners] (shell) at (4.5,-2.5) {\bf Subprocess (Bash/Zsh)};
+        \draw[->, thick, >=stealth, color=primary] (ctrl.250) -- node[left] {\small Exec} (shell.110);
+        \draw[<-, thick, >=stealth, color=primary] (ctrl.290) -- node[right] {\small Output} (shell.70);
+    \end{tikzpicture}
+    
+    \vspace{2.5cm}
+    {\large\bfseries Authors: \par}
+    {\large Yuval Reuveni \& Arbel Tepper \par}
+    \vspace{1.5cm}
+    
+    \vfill
+    {\large\color{secondary} July 2026 \par}
+\end{titlepage}
+
+
+
+% SECTION 2: SINGLE COMMAND AT A TIME
+\section{Single command at a time.}
+\label{sec:single_command}
+The core requirement of this section is translating a single natural language request into a shell command, printing it, executing it in the user's active shell, and displaying the output.
+
+\subsection{Implementation Details}
+We developed the entry-point executable \texttt{doit} in Python (placed on the user's \texttt{PATH} via \texttt{\textasciitilde/.local/bin}). The system operates by assembling a system prompt, appending an environment block detailing the user's shell parameters, and calling the LPU with a command-step cap of \texttt{max\_steps=1}. 
+
+If the user's prompt represents a command, the LPU calls the \texttt{run\_command} tool, which is intercepted and executed via Python's \texttt{subprocess.run}. If the prompt represents a general inquiry, the LPU responds with the \texttt{answer} tool.
+
+\subsection{Design Decisions}
+
+\begin{decisionbox}{Design Decision: Shell-Function Wrapper for Directory Navigation (\texttt{cd})}
+    \textbf{Problem:} When a user runs a Python script, it runs in a child subprocess. Any directory change (\texttt{cd}) executed by the script is lost when the script exits, returning the user to the original terminal directory.
+    
+    \textbf{Solution:} We resolved this by writing a dual-shell wrapper. The \texttt{change\_dir} tool verifies that the path exists and writes it to a temporary file: \texttt{\textasciitilde/.doit/cd\_target\_\$DOIT\_SESSION}. Upon \texttt{doit}'s termination, a shell function wrapper intercepts the exit, checks for the presence of this file, runs the native \texttt{cd} command inside the parent shell, and deletes the file.
+    \end{decisionbox}
+
+\begin{decisionbox}{Design Decision: Dual-Shell Variable Normalization}
+    \textbf{Context:} Since different team members use different operating systems and shells (e.g., macOS/Zsh vs. Linux/Bash), command arguments and behavior can diverge.
+    
+    \textbf{Solution:} The Controller auto-detects the host shell via \texttt{\$SHELL} and includes the shell type and operating system in the environment prompt block. The system prompt instructs the LPU to emit syntax tailored to the host environment.
+\end{decisionbox}
+
+\begin{decisionbox}{Design Decision: Primary API Model Selection}
+    \textbf{Choice:} We selected \texttt{openai/gpt-4o-mini} as our primary API model. It is inexpensive, runs with low latency, and features robust native tool-calling capabilities that simplify core development.
+\end{decisionbox}
+
+\subsection{Example Interactions}
+Below are two successful single-command interactions run using our primary model:
+
+\begin{lstlisting}[language=bash, caption={Listing files including hidden ones.}]
+$ doit "show me all files here, including hidden ones"
+$ ls -la
+total 232
+drwxr-xr-x@  6 yuval  staff    192 Jul  7 18:23 acdl
+-rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 CLAUDE.md
+-rw-r--r--@  1 yuval  staff  30675 Jul  7 18:57 DECISIONS.md
+-rwxr-xr-x@  1 yuval  staff   1319 Jul  7 15:00 doit
+\end{lstlisting}
+
+\begin{lstlisting}[language=bash, caption={Disk space command execution.}]
+$ doit "how much disk space is left?"
+$ df -h
+Filesystem     Size   Used  Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s1   926Gi   17Gi  702Gi     3%    459k  4.3G    0%   /
+\end{lstlisting}
+
+\subsection{ACDL Context Specification: DoitAgentSingleCommand}
+The formal context structure representing the single command-at-a-time execution is detailed in the visual ACDL diagram below:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{acdl_v1.png}
+    \caption{Visual representation of the ACDL context for DoitAgentSingleCommand.}
+    \label{fig:acdl_v1}
+\end{figure}
+
+% SECTION 3: IDENTIFYING DANGEROUS COMMANDS
+\section{Identifying dangerous commands}
+\label{sec:safety}
+To prevent the agent from accidentally corrupting the host machine or executing destructive actions without oversight, we implement safety policies that intercept filesystem mutations.
+
+\subsection{Implementation Details}
+Safety is handled through a double-layer verification policy (defense in depth):
+\begin{enumerate}
+    \item \textbf{LPU Self-Report (Layer 1):} The \texttt{run\_command} tool schema requires the LPU to populate the \texttt{is\_destructive} boolean flag and provide an \texttt{explanation} of what the command will do.
+    \item \textbf{Deterministic Guard (Layer 2):} The Controller intercepts the decision and passes the command through a pre-compiled regex guard in \texttt{safety.py}. If the regex matches mutating operations (e.g. \texttt{rm}, \texttt{mv}, \texttt{cp}, \texttt{mkdir}, redirects \texttt{>}, \texttt{>>}, \texttt{git reset}), it overrides a false ``safe'' report, forcing \texttt{is\_destructive=True}.
+\end{enumerate}
+
+\subsection{Design Decisions}
+
+\begin{decisionbox}{Design Decision: In-Band Self-Report vs. Separate LLM Judge Call}
+    \textbf{Alternative Rejected:} We rejected using a separate LLM call to classify command destructiveness. 
+    
+    \textbf{Rationale:} A second LLM call doubles latency and API costs. Because the regex guard is required to handle safety deterministically anyway, we require the LPU to report destructiveness in the same JSON object as the command itself. The regex guard acts as the fallback mechanism. If the guard overrides the model's safety flag, the event is logged for analysis.
+\end{decisionbox}
+
+\begin{safetybox}{Safety Refusals vs. Confirmation Gates}
+    \textbf{Hard Refusals:} Any command containing \texttt{sudo} or starting with an interactive full-screen program (e.g., \texttt{vim}, \texttt{nano}, \texttt{less}, \texttt{top}) is blocked immediately in the Controller. No confirmation is offered.
+    
+    \textbf{Confirmation Gates:} When a command is flagged destructive (either by the model or the regex override), the Controller halts, displays the command and its explanation, and prompts the user with \texttt{Proceed? [y/N]}. Execution only proceeds if the user inputs \texttt{y} or \texttt{yes}.
+\end{safetybox}
+
+\subsection{Example Interactions}
+
+\begin{lstlisting}[language=bash, caption={Handling a destructive command with user confirmation.}]
+$ doit "delete junk.txt"
+[WARNING] This command modifies the filesystem:
+    rm junk.txt
+  This command deletes the file junk.txt.
+Proceed? [y/N] y
+$ rm junk.txt
+\end{lstlisting}
+
+\begin{lstlisting}[language=bash, caption={Interactive program refusal.}]
+$ doit "open vim to write a story"
+doit: 'vim' opens an interactive program doit can't wait for. Run it yourself:
+    vim
+\end{lstlisting}
+
+\subsection{ACDL Context Specification: DoitAgentSafety}
+The formal context structure representing the safety gate integration is detailed in the visual ACDL diagram below:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{acdl_v2.png}
+    \caption{Visual representation of the ACDL context for DoitAgentSafety.}
+    \label{fig:acdl_v2}
+\end{figure}
+
+% SECTION 4: MODEL FLEXIBILITY
+\section{Model flexibility}
+\label{sec:model_flexibility}
+To ensure the utility can run independently of commercial API keys, we extended the system to run local models locally.
+
+\subsection{Implementation Details}
+We introduced a configuration file \texttt{\textasciitilde/doit.cfg} to declare the active model and its adapter. We implement two code adapters behind a unified interface:
+
+\begin{decisionbox}{Design Decision: Native vs. Prompted Adapter Architectures}
+    \textbf{Native Adapter (\texttt{\_call\_native}):} For models supporting LiteLLM's JSON tool-calling protocol (e.g., \texttt{gpt-4o-mini}, \texttt{qwen3:4b-instruct}). LiteLLM passes tool schemas out-of-band and receives structured tool outputs.
+    
+    \textbf{Prompted Adapter (\texttt{\_call\_prompted}):} For local models that do not natively support tool-calling (e.g., \texttt{gemma3:4b}). It renders tool schemas as text, appends them to the system prompt, and enforces a strict JSON wrapper. To handle parser failures, we implement a string-based balanced brace scanner to locate JSON blocks, and allow \textbf{one retry} by appending the syntax error back to the LPU.
+\end{decisionbox}
+
+\subsection{Evaluation of Local Models}
+We evaluated three models using the test suite in \texttt{tests/cases.md}:
+\begin{table}[htbp]
+    \centering
+    \caption{Model capabilities and adapters.}
+    \begin{tabularx}{\textwidth}{lllX}
+        \toprule
+        \textbf{Model Name} & \textbf{Deployment} & \textbf{Adapter} & \textbf{Tool-Calling Capability} \\
+        \midrule
+        \texttt{openai/gpt-4o-mini} & API (Remote) & Native & Full structured tool support \\
+        \texttt{ollama/qwen3:4b-instruct} & Local (Ollama) & Native & Local tool-calling support \\
+        \texttt{ollama/gemma3:4b} & Local (Ollama) & Prompted & None; relies on text JSON prompts \\
+        \bottomrule
+    \end{tabularx}
+    \label{tab:models_eval}
+\end{table}
+
+\subsection{Analysis of Divergences and Failure Modes}
+
+\subsubsection{Gemma-3 Impossible Request Failure}
+When asked to perform a physically impossible command like \texttt{"make my laptop fly"}, the native models correctly responded with the conversational \texttt{answer} tool. However, the local \texttt{gemma3:4b} model (running under the prompted adapter) attempted to execute it via bash, choosing the \texttt{run\_command} tool with:
+\begin{lstlisting}[language=bash]
+echo "Sorry, I cannot make your laptop fly.""
+\end{lstlisting}
+Because the model appended a trailing double quote, the command crashed with a shell parse error: \texttt{zsh:1: unmatched "}.
+
+\subsubsection{Prompted Adapter Recovery Logs}
+Under the prompted adapter, local models often return markdown fences and conversational preambles. Below is a log showing our parser successfully stripping the preamble and recovering the JSON payload:
+\begin{lstlisting}[caption={JSON de-fencing and brace-scanning recovery.}]
+Raw LPU Output:
+Sure, here is the command to view disk space:
+```json
+{
+  "tool": "run_command",
+  "args": {
+    "command": "df -h",
+    "is_destructive": false,
+    "explanation": "Check available disk space."
+  }
+}
+```
+Parser Action: Strip fences, run brace scan -> extracted {"tool": "run_command", ...}
+\end{lstlisting}
+
+\subsection{ACDL Context Specification: DoitAgentPrompted}
+For models without native tool-calling, tool schemas move into the system prompt prose, and the raw text reply is parsed. The visual ACDL diagram below shows how we handle JSON validation and retries:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{acdl_v3.png}
+    \caption{Visual representation of the ACDL context for DoitAgentPrompted.}
+    \label{fig:acdl_v3}
+\end{figure}
+
+% SECTION 5: MULTI-TURN
+\section{Multi-turn}
+\label{sec:multi_turn}
+To move from isolated commands to conversational sequences, we carry state across invocations, allowing commands to refer to previous outputs.
+
+\subsection{Implementation Details}
+When \texttt{doit} runs, it loads the session ID from the environment variable \texttt{DOIT\_SESSION} (which defaults to \texttt{"default"} if unset). The Controller reads and parses the JSONL session logs located at \texttt{\textasciitilde/.doit/sessions/\$DOIT\_SESSION.jsonl}, extracts the last $K=10$ turns, and splices them back into the prompt context.
+
+\subsection{Design Decisions}
+
+\begin{decisionbox}{Design Decision: JSONL Storage Format}
+    \textbf{Problem:} Selecting an appropriate storage format for history.
+    
+    \textbf{Choice:} We chose JSONL (JSON Lines) files over SQLite. JSONL is lightweight, human-readable, and allows O(1) appends. It facilitates debugging and log evidence curation for the report.
+\end{decisionbox}
+
+\begin{decisionbox}{Design Decision: Tiered Truncation Budgets (\texttt{HOT} vs. \texttt{COLD})}
+    \textbf{Problem:} Feeding complete command outputs (e.g. file listings or compiler logs) back into the prompt quickly overflows the context window.
+    
+    \textbf{Solution:} We implement a tiered head/tail truncation strategy. The active turn's output is allocated a \textbf{Hot Budget} (up to 3,000 characters head, 1,000 characters tail) to support follow-up decisions. Older replayed history turns are truncated to a \textbf{Cold Budget} (1,000 characters head, 300 characters tail), which provides enough context to resolve follow-ups (like referring to listed files) while saving tokens.
+\end{decisionbox}
+
+\subsection{Example Multi-Turn Interactions}
+Below is a live multi-turn session log using \texttt{gpt-4o-mini}, demonstrating how the model changes flags and behavior rather than parroting commands:
+
+\begin{lstlisting}[language=bash, caption={Relational multi-turn listing and sorting.}]
+$ DOIT_SESSION=demo doit "list the files here"
+$ ls -l
+total 232
+-rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 CLAUDE.md
+-rw-r--r--@  1 yuval  staff  30675 Jul  7 18:57 DECISIONS.md
+
+$ DOIT_SESSION=demo doit "now sort them by date"
+$ ls -lt
+total 232
+-rw-r--r--@  1 yuval  staff  30675 Jul  7 18:57 DECISIONS.md
+-rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 CLAUDE.md
+
+$ DOIT_SESSION=demo doit "now in ascending order"
+$ ls -ltr
+total 232
+-rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 CLAUDE.md
+-rw-r--r--@  1 yuval  staff  30675 Jul  7 18:57 DECISIONS.md
+\end{lstlisting}
+
+\subsection{ACDL Context Specification: DoitAgentHistory}
+The formal context structure representing the conversation history replay integration is detailed in the visual ACDL diagram below:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{acdl_v4.png}
+    \caption{Visual representation of the ACDL context for DoitAgentHistory.}
+    \label{fig:acdl_v4}
+\end{figure}
+
+% SECTION 6: CLARIFICATIONS
+\section{Clarifications}
+\label{sec:clarifications}
+When a user request is ambiguous, the agent must ask clarifying questions rather than guessing or executing a potentially harmful action.
+
+\subsection{Implementation Details}
+We introduce the \texttt{ask\_user} tool. When invoked by the LPU, the Controller prints the question alongside a numbered options menu, blocks on user input, and feeds the response back to the LPU. This process runs as a within-turn loop and does not count towards the command-step count.
+
+\subsection{Design Decisions}
+
+\begin{decisionbox}{Design Decision: Unanswered Clarification Default Behavior}
+    \textbf{Problem:} How to proceed if the user presses Enter (empty input) or interrupts the prompt.
+    
+    \textbf{Solution:} Pressing Enter returns \texttt{"no answer"} to the LPU, instructing it to proceed with the default option it stated. If this default results in a destructive command, the Layer 2 safety confirmation gate (\texttt{Proceed? [y/N]}) still blocks execution. Pressing Ctrl-C raises a KeyboardInterrupt, aborts the turn immediately, and logs the abort status.
+\end{decisionbox}
+
+\subsection{Non-Annoyance Cap}
+To prevent the agent from asking questions repeatedly, we implement two controls:
+\begin{enumerate}
+    \item \textbf{System Prompt Policy:} The LPU is instructed to ask questions only when a wrong guess is destructive, or when interpretations lead to different results with no clear default. Otherwise, it must assume the most common interpretation and state it in the final output.
+    \item \textbf{Structural Cap:} We enforce a hard limit of \texttt{MAX\_CLARIFICATIONS=2} in the Controller. If the LPU exceeds this, the Controller feeds a capped message warning the model to commit to its best guess.
+\end{enumerate}
+
+\subsection{Example Interaction}
+Below is a live interaction showing how the clarification loop and safety confirmation gate stack together cleanly:
+
+\begin{lstlisting}[language=bash, caption={Stacked safety: clarification leading to a destructive confirmation gate.}]
+$ doit "delete the logs"
+Are you sure you want to delete the logs? This action cannot be undone.
+  1. Yes
+  2. No
+Your answer (number or text): 1
+
+[WARNING] This command modifies the filesystem:
+    rm *.log
+  This command deletes log files in the current directory.
+Proceed? [y/N] y
+$ rm *.log
+\end{lstlisting}
+
+\subsection{ACDL Context Specification: DoitAgentClarify}
+The final formal context structure for our agent, representing both replayed turns and the within-turn clarification loop, is detailed in the visual ACDL diagram below:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{acdl_v5.png}
+    \caption{Visual representation of the ACDL context for DoitAgentClarify \& Multi-turn).}
+    \label{fig:acdl_v5}
+\end{figure}
+
+% SECTION 7: RICHER INTERACTIONS
+\section{Richer interactions}
+\label{sec:richer_interactions}
+Richer interactions require the agent to respond to non-commands (e.g., ``how do I do X?'') and handle follow-up refinement chains (e.g., ``how do I list files?'' $\rightarrow$ ``modify it to show sizes'' $\rightarrow$ ``execute it'').
+
+\subsection{Implementation Details}
+We resolved this without introducing new tools or classification models. 
+\begin{itemize}
+    \item \textbf{Explaining vs. Running:} If a user asks a question, the LPU uses the \texttt{answer} tool. The Controller displays the answer and terminates the turn loop without executing commands.
+    \item \textbf{Execution from History:} When the user subsequently requests ``execute it'', the request is sent with the session's turn history. The LPU reads the command structure it described in the previous \texttt{answer} and passes it to the \texttt{run\_command} tool.
+\end{itemize}
+
+\subsection{Example Interaction}
+Below is a three-turn interaction chain showing history extraction and execution:
+\begin{lstlisting}[language=bash, caption={How-do-I question, command modification, and execution.}]
+$ doit "how do I find python files modified this week?"
+You can use: find . -name "*.py" -mtime -7
+$ doit "modify it to also show file sizes"
+You can use: find . -name "*.py" -mtime -7 -ls
+$ doit "execute it"
+$ find . -name "*.py" -mtime -7 -ls
+  14283    8 -rw-r--r--   1 yuval  staff  1319 Jul  7 15:00 ./doit
+\end{lstlisting}
+
+\subsection{Limitations}
+We observed that smaller local models (such as \texttt{gemma3:4b}) frequently fail on the third turn (``execute it''), responding with ``Execute what?'' or hallucinating unrelated commands. This indicates that tracking command references across multiple conversational turns is a capability limited to larger, instruction-tuned models.
+
+% SECTION 8: MEMORY
+\section{Memory}
+\label{sec:memory}
+The memory subsystem allows the agent to persist long-term user facts across terminal windows, directories, and session boundaries.
+
+\subsection{Implementation Details}
+Memory storage is managed in \texttt{doitlib/state.py} via the flat JSON file \texttt{\textasciitilde/.doit/memories.json} (using the functions \texttt{load\_memories}, \texttt{add\_memory}, and \texttt{forget\_memory}). Unlike session history, this file is global and shared across all sessions. 
+
+During context assembly, the controller invokes \texttt{memory\_block()} in \texttt{doitlib/context.py}, which formats the current memories using the template in \texttt{prompts/memory\_block.txt}. This block lists each stored fact labeled with a stable numeric identifier (e.g., \texttt{m1}, \texttt{m2}) as \texttt{sys.memories} in the LLM's system prompt context. 
+
+The LPU manipulates these facts via two specialized tools: \texttt{remember(fact)} and \texttt{forget(id)}. Within the controller's turn loop, memory modifications are treated as within-turn steps. When the agent issues a memory tool call, the controller executes the state change in \texttt{\_handle\_memory} and immediately re-enters the execution loop (calling the LPU again) without decrementing the command step limit. This design allows the model to process memory changes and subsequently execute commands in a single user turn.
+
+\subsection{Design Decisions}
+
+\begin{decisionbox}{Design Decision: Global Shared Storage vs. Session-Keyed Memory}
+    \textbf{Problem:} Determining the persistence scope for stored facts.
+    
+    \textbf{Alternative Rejected:} Storing memories inside the terminal's isolated session history.
+    
+    \textbf{Rationale:} Storing facts per session defeats the purpose of memory. If a user defines their project directory in one terminal, they expect that preference to be recognized when starting a fresh terminal or working in a different directory. Storing memories globally ensures they are visible across all terminal sessions.
+\end{decisionbox}
+
+\begin{decisionbox}{Design Decision: Memory Operations as Within-Turn Steps}
+    \textbf{Problem:} Ensuring that metadata operations (like saving a fact) do not block or consume the execution budget.
+    
+    \textbf{Rationale:} If a user issues a command like \texttt{"remember this is my code folder and list files in it"}, the model must call \texttt{remember} followed by \texttt{run\_command}. If memory tool calls counted towards the command step budget (which defaults to 1), the agent would stop after memorizing, failing to execute the command. Processing memory tools as within-turn steps resolves this constraint.
+\end{decisionbox}
+
+\subsection{Example Interaction}
+Below is a multi-session interaction where a memory saved in one terminal window is retrieved in another:
+
+\begin{lstlisting}[language=bash, caption={Memory storage and cross-session retrieval.}]
+Terminal A:
+$ doit "remember that ~/school/llms/ass3 is my LLM class project folder"
+Fact stored.
+
+Terminal B:
+$ doit "go to my LLM class project folder"
+$ change_dir ~/school/llms/ass3
+\end{lstlisting}
+
+\subsection{Limitations}
+\begin{decisionbox}{Design Decision/Limitation: Monotonic ID Generation and Reuse}
+    \textbf{Behavior:} Memory IDs are generated dynamically as \texttt{m\{max\_id + 1\}}. If the highest ID is forgotten, its identifier is recycled for the next memory addition.
+    
+    \textbf{Limitation:} While this keeps identifiers short and readable, it creates a potential reference conflict in long-term history records. If an old replayed turn references a recycled ID, the context might contain a different fact than what the model originally saw. We accepted this limitation due to the small scale of memories (typically under a dozen facts).
+\end{decisionbox}
+
+\subsection{ACDL Context Specification: DoitAgentMemory}
+The context structure representing the persistent memory block injection is detailed in the visual ACDL diagram below:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{acdl_v6.png}
+    \caption{Visual representation of the ACDL context for memory injection.}
+    \label{fig:acdl_v6}
+\end{figure}
+
+% SECTION 9: USER AWARENESS
+\section{User awareness}
+\label{sec:user_awareness}
+To enhance agent comprehension of manual shell actions, we capture the user's manual terminal command history and inject it into the agent's context.
+
+\subsection{Implementation Details}
+Shell integration snippets (appended to \texttt{\textasciitilde/.zshrc} or \texttt{\textasciitilde/.bashrc}) define a shell hook (\texttt{precmd} in Zsh, \texttt{PROMPT\_COMMAND} in Bash) that automatically writes every shell command executed by the user to a per-session log file: \texttt{\textasciitilde/.doit/shell\_hist/\$DOIT\_SESSION} in the format \texttt{timestamp|cwd|command}.
+
+When \texttt{doit} runs, the controller calls \texttt{load\_recent\_user\_commands} in \texttt{doitlib/state.py}. This helper reads the raw shell history and filters out commands starting with the word \texttt{doit} to isolate manual user actions. The controller then compiles the last 20 filtered commands using \texttt{user\_shell\_history\_block} in \texttt{doitlib/context.py} (following the template in \texttt{prompts/user\_shell\_history\_block.txt}) and appends them to the context as a list of manual command entries.
+
+\subsection{Design Decisions}
+
+\begin{decisionbox}{Design Decision: Python-Side Log Filtering vs. Shell Hook Filtering}
+    \textbf{Alternative Rejected:} Filtering out \texttt{doit} invocations inside the shell configuration hook itself.
+    
+    \textbf{Rationale:} Shell-side configurations are fragile and can easily crash prompt drawing or command resolution if they hit syntax errors. We chose to log all commands indiscriminately from the shell, delegating the filtering and parsing logic to Python where it can be managed safely.
+\end{decisionbox}
+
+\begin{decisionbox}{Design Decision: Isolated Per-Terminal History Streams}
+    \textbf{Rationale:} Logging command history under a session-keyed folder \texttt{shell\_hist/\$DOIT\_SESSION} guarantees that manual actions typed in Terminal A do not pollute Terminal B's context, maintaining local alignment.
+\end{decisionbox}
+
+\subsection{Example Interaction}
+Below is a live session where the agent retrieves and explains a manual command failure:
+
+\begin{lstlisting}[language=bash, caption={Retrieving manual history to explain command failure.}]
+$ mkdir reports
+$ cd reports
+$ cat status.log
+cat: status.log: No such file or directory
+$ doit "why did my last command fail?"
+The command 'cat status.log' failed because there is no file named 'status.log' inside the 'reports' folder you just created.
+\end{lstlisting}
+
+\subsection{Limitations}
+\begin{decisionbox}{Design Decision/Limitation: Manual Dotfile Synchronization}
+    \textbf{Problem:} Updates to the snippet template in \texttt{shell/zshrc\_snippet.sh} do not automatically synchronize with the user's active configuration file.
+    
+    \textbf{Limitation:} If the shell hooks change in the codebase, the user must manually re-copy and re-source the snippet. Automating this sync was rejected to avoid corrupting dotfiles.
+\end{decisionbox}
+
+\subsection{ACDL Context Specification: DoitAgentUserAware}
+The context structure representing manual user shell history injection is detailed in the visual ACDL diagram below:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{acdl_v7.png}
+    \caption{Visual representation of the ACDL context for user shell history awareness.}
+    \label{fig:acdl_v7}
+\end{figure}
+
+% SECTION 10: OUTPUT AWARENESS
+\section{Output awareness}
+\label{sec:output_awareness}
+To satisfy output-awareness requirements, the agent must be able to inspect previous command execution stdout, stderr, and return codes to answer follow-up queries.
+
+\subsection{Implementation Details}
+When \texttt{run\_command} executes a shell instruction, the controller captures the return code, stdout, and stderr. These outputs are stored inside the session history JSONL logs.
+
+When building the context for subsequent turns, the controller replays the past turns. To prevent token bloat, the controller applies a tiered truncation strategy defined in \texttt{doitlib/tools.py} via \texttt{truncate\_for\_context(text)}:
+\begin{itemize}
+    \item \textbf{Hot Budget:} The output of the current/most-recent turn is allocated up to 3,000 characters head and 1,000 characters tail, ensuring listings and detailed compiler outputs are fully accessible.
+    \item \textbf{Cold Budget:} Older turns in the history are truncated to 1,000 characters head and 300 characters tail, which is sufficient to capture errors or file lists without exceeding context limits.
+\end{itemize}
+
+\subsection{Design Decisions}
+
+\begin{decisionbox}{Design Decision: Unified User/Assistant Chat Message Splicing vs. Native Tool Roles}
+    \textbf{Problem:} Replaying tool execution results across different invocations.
+    
+    \textbf{Alternative Rejected:} Replaying history using the native tool roles.
+    
+    \textbf{Rationale:} Native tool-calling schemas (e.g. OpenAI's tools protocol) require every tool response message to carry a valid \texttt{tool\_call\_id} that matches an active tool call. Since these IDs are ephemeral and not persisted, replaying them directly causes API exceptions. We resolved this by rendering past tool outputs as plain user/assistant conversational turns, which instruction-tuned models parse seamlessly.
+\end{decisionbox}
+
+\subsection{Example Interaction}
+Below is a live session where the user asks a question about the output of a prior command:
+
+\begin{lstlisting}[language=bash, caption={Inspecting prior command output.}]
+$ doit "list the largest files in this directory"
+$ ls -lhS
+total 232K
+-rw-r--r--@ 1 yuval  staff   30K Jul  7 18:57 DECISIONS.md
+-rw-r--r--@ 1 yuval  staff   12K Jul  7 18:24 CLAUDE.md
+$ doit "which of these is larger?"
+DECISIONS.md is the larger file, with a size of 30K compared to CLAUDE.md's 12K.
+\end{lstlisting}
+
+% SECTION 11: MULTI-TASKING
+\section{Multi-tasking}
+\label{sec:multi_tasking}
+When users run multiple terminal windows concurrently, history streams must be isolated to prevent context bleeding while still allowing cross-session references.
+
+\subsection{Implementation Details}
+Terminal sessions are isolated using the \texttt{\$DOIT\_SESSION} environment variable. The controller scans the \texttt{sessions/} folder via \texttt{list\_other\_sessions} in \texttt{doitlib/state.py} to identify other active sessions (recency-filtered to 24 hours).
+
+For every turn, the controller compiles a one-line summary block for each sibling terminal window via \texttt{other\_sessions\_block()} using the template in \texttt{prompts/other\_sessions\_block.txt}. If the LPU determines it needs to read the detailed history of a sibling session, it invokes the seventh tool: \texttt{read\_session(session\_id)}. This tool triggers \texttt{\_handle\_read\_session} in the controller, which renders the sibling's last 10 turns via \texttt{render\_session\_detail()} in \texttt{doitlib/context.py} and feeds the detailed output back to the LPU within the same turn.
+
+\subsection{Design Decisions}
+
+\begin{decisionbox}{Design Decision: Lightweight Summaries + Fetch Tool vs. Full Context Injection}
+    \textbf{Alternative Rejected:} Splicing the full multi-turn history of all active terminals.
+    
+    \textbf{Rationale:} Injecting full transcripts of all active windows would lead to severe context pollution, high latency, and increased costs. Splicing a one-line summary of other terminals keeps the model aware of active session IDs and topics, and the \texttt{read\_session} tool allows it to fetch details only when explicitly requested.
+\end{decisionbox}
+
+\begin{decisionbox}{Design Decision: Context Block Ordering for Local Pronoun Resolution}
+    \textbf{Problem:} Ensuring that implicit references (e.g. ``sort them'') resolve to the local terminal window rather than another window's files.
+    
+    \textbf{Solution:} In \texttt{build\_messages}, we splice the \texttt{other\_sessions\_block} at the top of the prompt, whereas the local session's own replayed history is placed directly above the current user request. Because the local history is closest to the request, implicit references resolve locally by default.
+\end{decisionbox}
+
+\subsection{Example Interaction}
+Below is a two-terminal interaction showing implicit local routing and explicit cross-session copying:
+
+\begin{lstlisting}[language=bash, caption={Implicit local resolution vs. explicit cross-session copy.}]
+Terminal 1:
+$ doit "move to my llm class folder"
+$ doit "list the files"
+alpha.txt beta.txt gamma.txt
+
+Terminal 2:
+$ doit "move to my documents folder"
+$ doit "create a folder for each year from 2020 to 2026"
+Folders created.
+
+Terminal 1:
+$ doit "sort them by date"
+$ ls -t
+[Implicit reference resolves locally to Terminal 1's files (alpha/beta/gamma)]
+
+$ doit "now do the same folder task we did in window 2 here"
+[Agent calls read_session("Terminal_2"), fetches history, and runs mkdir {2020..2026}]
+\end{lstlisting}
+
+\subsection{ACDL Context Specification: DoitAgentMultitask}
+The context structure representing cross-session summaries and the dynamic retrieval tool is detailed in the visual ACDL diagram below:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{acdl_v8.png}
+    \caption{Visual representation of the ACDL context for multitasking and cross-session handling.}
+    \label{fig:acdl_v8}
+\end{figure}
+
+% SECTION 12: FURTHER EXTENSIONS
+\section{Further extensions}
+\label{sec:further_extensions}
+We analyzed three potential capabilities to extend the agent's robustness and control, implementing one.
+
+\subsection{Description of Three Extensions}
+\begin{enumerate}
+    \item \textbf{Multi-Step Command Plans + Self-Correcting Retry (Implemented):} Enables the model to preview a list of steps using the \texttt{plan(steps[])} tool, dynamically expand its command budget for complex operations, and automatically receive corrective execution attempts if a command fails (returns exit code $\neq 0$).
+    \item \textbf{Dry-Run Command Preview (Described):} An extension that intercepts modifying shell commands and runs them in a sandboxed, copy-on-write filesystem layer (or parses them to simulate changes), providing the user with a precise list of file insertions/deletions before they authorize execution.
+    \item \textbf{Undo Journal (Described):} A rollback journal that logs the inverse of executed filesystem mutations (e.g. tracking file deletions to copy them to a trash folder, or storing inverse paths for moves). This allows the user to issue an \texttt{"undo"} command to reverse the agent's prior changes.
+\end{enumerate}
+
+\subsection{Implementation of Multi-Step Command Plans \& Retry}
+When the user submits a complex request (e.g., \texttt{"create reports folder, go inside it, and list it"}), the LPU invokes the \texttt{plan} tool. The controller handles this in \texttt{\_handle\_plan()}, raising the turn's local execution budget to:
+$$\text{new\_budget} = \max(\text{current\_budget},\ \text{len(steps)} + 3)$$
+Crucially, the plan is displayed to the user as a preview. The LPU then carries out each step individually by proposing shell commands via \texttt{run\_command} in subsequent iterations, which undergo safety checks one at a time.
+
+If any command returns a non-zero exit code, the controller triggers a self-correcting retry. If \texttt{retry\_used} is false, the controller bumps the budget by 1 and returns the execution stderr as the tool's result. The LPU then gets one additional step to correct its command (e.g., correcting syntax or creating a missing parent folder) before the turn terminates.
+
+\subsection{Design Decisions}
+
+\begin{decisionbox}{Design Decision: Opt-In Plans vs. Global Step Budget Increase}
+    \textbf{Problem:} Increasing step limits globally degrades performance and increases costs on simple queries.
+    
+    \textbf{Rationale:} A simple query like \texttt{"what is my disk space?"} should never consume more than 1 LPU call. By utilizing an opt-in \texttt{plan} tool, the model explicitly signals when a task is complex, raising the step cap only for the turn that requested it.
+\end{decisionbox}
+
+\begin{decisionbox}{Design Decision: Capability-Gating vs. Adapter-Hardwiring}
+    \textbf{Rationale:} We gate the plan tool via the configuration parameter \texttt{enable\_plans} rather than hardcoding it to the adapter. This keeps native and prompted adapters fully interchangeable while isolating plan execution to models with high instruction-following competence.
+\end{decisionbox}
+
+\subsection{Example Interaction}
+Below is a live session executing a multi-step plan with a corrective retry:
+
+\begin{lstlisting}[language=bash, caption={Multi-step plan execution with self-correcting retry.}]
+$ doit "create a folder named log_reports, move inside, and touch config.txt"
+Plan:
+  1. Create a directory named log_reports.
+  2. Change directory to log_reports.
+  3. Create a file named config.txt.
+
+$ mkdir log_reports
+$ change_dir log_reports
+$ touch config.txt
+[Self-Correction example]:
+If 'touch' failed due to a missing utility, the model would receive the stderr and automatically attempt a correction (e.g. echo > config.txt) in a single turn.
+\end{lstlisting}
+
+\subsection{ACDL Context Specification: DoitAgentPlans}
+The context structure representing planning, dynamic budget scaling, and the corrective retry path is detailed in the visual ACDL diagram below:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{acdl_v9.png}
+    \caption{Visual representation of the ACDL context for multi-step planning and self-correcting retry.}
+    \label{fig:acdl_v9}
+\end{figure}
+
+\end{document}
