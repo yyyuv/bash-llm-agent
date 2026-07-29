@@ -43,11 +43,13 @@ These pairs are ready-made "what didn't work → how we fixed it" content (feeds
 
 ## D. Model comparison (required content, currently a stub)
 
-- [ ] D1. §3.2: run all ~15 `tests/cases.md` cases on gpt-4o-mini, qwen3:4b, gemma3:4b; add a results table (pass / partial / fail per case per model).
-- [ ] D2. §3.3: add a qwen3-vs-gemma3 discussion (the required local-vs-local comparison): structured-output reliability, tool-choice quality, destructive flagging accuracy, clarification behavior. At least one transcript where qwen3 succeeds and gemma3 fails on the *same* case.
-- [ ] D3. §3.3: report logged numbers: JSON parse-failure/retry rate per model, regex-guard override count per model.
-- [ ] D4. §3.1: one sentence explaining the 4B choice (assignment allows 4B tier; hardware/latency rationale) — the plan originally named 7–8B models.
-- [ ] D5. §3.1: note any Ollama tool-calling quirks observed with qwen3 native adapter (or state that none appeared).
+**DATA READY:** all runs done (2026-07-12) + graded — `report/model_comparison_data.md` (table, qwen-vs-gemma diffs with real shell output, logged numbers). Transcripts: `logs/phase3/{gpt4omini,qwen3,gemma3,gemma3_2}.txt`. Remaining work is writing the report prose around this data.
+
+- [x] D1. ✅ **DATA READY** — results table (P/~/F per case per model) in `report/model_comparison_data.md`; gpt-4o-mini 10/13 > qwen3 7/13 > gemma3 6/13 over cases 1–8 + 56–60. Paste into §3.2.
+- [x] D2. ✅ **DATA READY** — qwen-wins-gemma-fails on the SAME case captured with real output: case 57 (qwen correct word-freq vs gemma mis-flags read-only pipeline as destructive & aborts), case 3 (qwen refuses vs gemma runs `df`), plus gemma run-to-run instability (joke told/refused across the two runs) and native-vs-prompted JSON reliability. Write the §3.3 discussion from `report/model_comparison_data.md` D2 section.
+- [x] D3. ✅ **DATA READY** — guard overrode model 6/15 (`phase2/safety_guard_results.json`); prompted-adapter 10/10 offline (`phase3/prompted_adapter_results.json`); live JSON failures: qwen 0, gemma 1 recovered + 1 hard-fail. Numbers + example override in `report/model_comparison_data.md` D3. Paste into §3.3.
+- [ ] D4. §3.1: one sentence explaining the 4B choice (assignment allows 4B tier; hardware/latency rationale) — the plan originally named 7–8B models. (Material noted in `report/model_comparison_data.md` D4; user writes the sentence.)
+- [x] D5. ✅ **DATA READY** — qwen3 native adapter: no tool-call protocol breakage; only quirk = behavioral over-caution (case 1 refused a `/tmp` sandbox). Note in `report/model_comparison_data.md` D5; drop into §3.1.
 
 ## E. Elaborate the architecture
 
