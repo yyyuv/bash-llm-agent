@@ -12,9 +12,10 @@ Companion to REPORT_REVIEW.md. Check off as you go.
 - **C (real logs):** C1–C11 ✅ all covered (logs on disk + curated).
 - **D (model comparison):** D1 ✅ (results table now in §4), D3 ✅ (logged numbers in §4). Data source: `report/model_comparison_data.md`.
 - **G:** G2 ✅ (staged §11/§12/§2 examples replaced with real logs), G3 ✅ (listings sit next to each figure).
-- **H:** H10a/b/c ✅ (v1 ACDL fixed), H14 ✅ (real guard-override + 6/15 tally in §2).
+- **H:** H10a/b/c ✅ (v1 ACDL fixed), H14 ✅ (real guard-override + 6/15 tally in §2), H1–H4 ✅ (front matter: cover diagram removed, moved into §1 with Controller→User arrow, TOC, intro).
+- **F (limitations):** F1–F6b ✅ (per-section Limitations added to §2/§3/§4/§5/change_dir/§10/§11/§12; §6/§7/§9 already had them).
 
-**Still needed — see groups below.** Biggest gaps: §0 overview (E), Conclusion + Intro (F7/H4), title-page diagram fix (H1/H2), TOC (H3). Per-section Limitations (F1–F6b) are now DONE — added to §2/§3/§4/§5/change_dir/§10/§11/§12 in `report.tex` (§6/§7/§9 already had them).
+**Still needed — see groups below.** Biggest gaps: overview depth (E1 DONE via the §1 intro, but E2 tool-inventory table / E3 state-layout tree / E4 logging paragraph / E5 v1-blocks note are still owed), Conclusion (F7). Front matter DONE: title-page diagram removed (H1), diagram moved into §1 with the Controller→User arrow (H2), TOC added (H3), intro added (H4). Per-section Limitations (F1–F6b) DONE — added to §2/§3/§4/§5/change_dir/§10/§11/§12 (§6/§7/§9 already had them).
 
 > **Compile note:** no LaTeX on the dev machine — the `.tex` has NOT been compiled/verified yet. `cd report && pdflatex report.tex` ×2 (or Overleaf with `report/`+`acdl/`+`prompts/`+`doitlib/` siblings). Watch the first run for errors.
 
@@ -48,9 +49,9 @@ Companion to REPORT_REVIEW.md. Check off as you go.
 - [ ] D4. §3/§4: one sentence on the 4B choice (assignment allows 4B tier; hardware/latency; the plan originally named 7–8B). *(Prose — one sentence.)*
 - [ ] D5. ⚠ note the qwen native quirk (over-caution: refused a `/tmp` sandbox) — material in `model_comparison_data.md` D5; not yet in report prose.
 
-## E. Architecture overview (§0) — NOT STARTED
+## E. Architecture overview (§1) — E1 DONE (via the §1 intro); E2–E5 still owed
 
-- [ ] E1. New §0 "System overview" (~1 page): Controller-wraps-LPU principle, the loop, the rule "every feature = tool | context block | controller logic". *(Prose + I can scaffold.)*
+- [x] E1. ✅ DONE — §1 "Introduction & System Overview" covers the Controller-wraps-LPU principle + the loop (`fig:architecture`) and context assembly (`fig:context_map`). *(Gap: the one-sentence "every feature = tool | context block | controller logic" framing rule isn't stated — add it if you want E1 airtight.)*
 - [ ] E2. §0: final 8-tool inventory table — **reuse the table now in Appendix A** (move/duplicate a compact version up front). *(I can do.)*
 - [ ] E3. §0: `~/.doit/` state-layout tree (sessions/, memories.json, shell_hist/, logs/) + repo structure. *(I can do.)*
 - [ ] E4. §0: one paragraph on the logging infrastructure (raw LLM traffic in `logs/` as evidence) + where submitted logs live. *(Prose.)*
@@ -77,16 +78,16 @@ The assignment requires **limitations for each section**. Add a short Limitation
 ## H. Partner review notes (Yuval + Arbel)
 
 ### Title page & front matter
-- [ ] H1. Remove the architecture diagram from the cover. *(I can do.)*
-- [ ] H2. Move the diagram into §0 and **add the missing Controller→User arrow** (output/answer path). *(I can do the TikZ.)*
-- [ ] H3. Add a table of contents (`\tableofcontents`). *(I can do.)*
-- [ ] H4. Add an introduction. *(Prose.)*
+- [x] H1. ✅ DONE — architecture diagram removed from the cover (title page now text-only).
+- [x] H2. ✅ DONE — diagram moved into new §1 "Introduction & System Overview" as `fig:architecture`, **with the added Controller→User arrow** ("Answer / Output" return path).
+- [x] H3. ✅ DONE — `\tableofcontents` added after the title page.
+- [x] H4. ✅ DONE — introduction added as §1 (Yuval's supplied intro, judged good enough, used verbatim; includes the context-assembly figure `fig:context_map`). ⚠ NOTE: intro says "five universal tools" — the final system has 8 (see Appendix A). Left as-is (author's prose / core-design framing); reword if a grader would flag it.
 
 ### Section 1 (single command)
 - [ ] H5. State the available tools at this stage (run_command, answer) in the §1 body. *(Prose — small.)*
 - [ ] H6. Show/reference the §1 system prompt (now in Appendix A — add a short excerpt or pointer). *(Prose — small.)*
 - [ ] H7. Make the model explicit in the §1 narrative (`openai/gpt-4o-mini`), not only in the decision box. *(Prose — small.)*
-- [ ] H8. **BEFORE SUBMIT (Arbel):** §1/§5/§10 example listings leak repo internals (`CLAUDE.md`, `DECISIONS.md`) — re-run those demos in a neutral folder with generic files.
+- [ ] H8. ⚠ PARTIAL — **BEFORE SUBMIT (Arbel):** §1/§5/§10 example listings leaked repo internals. `CLAUDE.md` has been swapped to `README.md`, but `DECISIONS.md` still appears (§1 lines 243/476/481/488, §10 lines 750/753) — and `README.md`/`DECISIONS.md` are still recognizably repo files. Finish by re-running those demos in a neutral folder with generic files (or swap the remaining names to generic ones like `notes.txt`/`report.txt`).
 - [ ] H9. Add a failings/issues subsection to §1 (= F1).
 - [x] H10a. ✅ DONE — v1 spec lists only `run_command, answer` (change_dir removed).
 - [x] H10b. ✅ DONE — v1 annotates that native tools travel out-of-band via `tools=` (only the prompted adapter embeds them).
@@ -103,8 +104,8 @@ The assignment requires **limitations for each section**. Add a short Limitation
 ## Z. Before submission (final checklist)
 
 - [ ] Z1. **Add the test cases:** include `tests/cases.md` (the fixed ~15+ case suite the models were run against) in the report — e.g. as an appendix listing — so graders can see exactly what was tested. *(I can add via `\lstinputlisting`/table.)*
-- [ ] Z2. H8 — re-run §1/§5/§10 demos in a neutral folder (no repo internals). **Arbel.**
+- [ ] Z2. ⚠ PARTIAL — H8: `CLAUDE.md`→`README.md` done in the listings; `DECISIONS.md` still leaks (§1/§10). Finish the neutral-folder re-run (or swap remaining names). **Arbel.**
 - [ ] Z3. H15 — manual end-to-end safety re-run.
 - [ ] Z4. Compile the PDF (`cd report && pdflatex report.tex` ×2, or Overleaf) and fix any listing/UTF-8 errors.
 - [ ] Z5. Check the course's **AI-assistance disclosure** policy and comply.
-- [ ] Z6. Final read-through for the owed prose: Intro (H4), §0 overview (E), per-section Limitations (F), Conclusion (F7), D2/D4 sentences.
+- [ ] Z6. Final read-through for the owed prose: §0 overview depth (E2/E3/E4 tables + trees), Conclusion (F7), D2/D4/D5 sentences. (Intro/H4 and per-section Limitations/F1–F6b now DONE — just re-read them for voice.)

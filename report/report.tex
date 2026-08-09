@@ -105,24 +105,7 @@
     {\Huge\bfseries\color{primary} Assignment 3: Agentic Shell (\texttt{doit}) \par}
     \vspace{0.5cm}
     {\large\color{secondary} LLM-Class 2025-2026 \par}
-    \vspace{1.5cm}
-    
-    \begin{tikzpicture}[scale=0.8, every node/.style={transform shape}]
-        % System Architecture Diagram in Title
-        \node[draw, rectangle, fill=background, minimum width=3cm, minimum height=1.2cm, rounded corners] (user) at (0,0) {\bf User Request};
-        \node[draw, rectangle, fill=primary, text=white, minimum width=3.5cm, minimum height=1.5cm, rounded corners] (ctrl) at (4.5,0) {\bf Controller (Python)};
-        \node[draw, rectangle, fill=background, minimum width=3cm, minimum height=1.2cm, rounded corners] (lpu) at (9,0) {\bf LPU (LLM)};
-        
-        \draw[->, thick, >=stealth, color=primary] (user) -- (ctrl);
-        \draw[->, thick, >=stealth, color=primary] (ctrl.15) -- node[above] {\small Context} (lpu.165);
-        \draw[<-, thick, >=stealth, color=primary] (ctrl.345) -- node[below] {\small Structured Decision} (lpu.195);
-        
-        \node[draw, rectangle, fill=background, minimum width=3.5cm, minimum height=1.2cm, rounded corners] (shell) at (4.5,-2.5) {\bf Subprocess (Bash/Zsh)};
-        \draw[->, thick, >=stealth, color=primary] (ctrl.250) -- node[left] {\small Exec} (shell.110);
-        \draw[<-, thick, >=stealth, color=primary] (ctrl.290) -- node[right] {\small Output} (shell.70);
-    \end{tikzpicture}
-    
-    \vspace{2.5cm}
+    \vspace{3cm}
     {\large\bfseries Authors: \par}
     {\large Yuval Reuveni \& Arbel Tepper \par}
     \vspace{1.5cm}
@@ -131,7 +114,94 @@
     {\large\color{secondary} July 2026 \par}
 \end{titlepage}
 
+\tableofcontents
+\newpage
 
+% SECTION 1: INTRODUCTION & OVERVIEW
+\section{Introduction \& System Overview}
+\label{sec:intro}
+This report documents our design and implementation of the \texttt{doit} agentic shell, a command-line utility that translates natural language instructions into shell commands and executes them on behalf of the user.
+
+Following the core architecture of LLM systems, we establish a strict boundary between the \textbf{Language Processing Unit (LPU)}—responsible solely for generating structured tool decisions from context—and the \textbf{Controller}—a deterministic Python runtime environment that manages state, enforces safety checks, and handles command execution. This boundary is illustrated in Figure~\ref{fig:architecture}.
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[every node/.style={transform shape}]
+        % System Architecture Diagram: Controller wraps LPU
+        \node[draw, rectangle, fill=background, minimum width=3cm, minimum height=1.2cm, rounded corners] (user) at (0,0) {\bf User};
+        \node[draw, rectangle, fill=primary, text=white, minimum width=3.5cm, minimum height=1.5cm, rounded corners] (ctrl) at (4.5,0) {\bf Controller (Python)};
+        \node[draw, rectangle, fill=background, minimum width=3cm, minimum height=1.2cm, rounded corners] (lpu) at (9,0) {\bf LPU (LLM)};
+
+        \draw[->, thick, >=stealth, color=primary] (user.10) -- node[above] {\small Request} (ctrl.170);
+        \draw[<-, thick, >=stealth, color=primary] (user.350) -- node[below] {\small Answer / Output} (ctrl.190);
+        \draw[->, thick, >=stealth, color=primary] (ctrl.15) -- node[above] {\small Context} (lpu.165);
+        \draw[<-, thick, >=stealth, color=primary] (ctrl.345) -- node[below] {\small Structured Decision} (lpu.195);
+
+        \node[draw, rectangle, fill=background, minimum width=3.5cm, minimum height=1.2cm, rounded corners] (shell) at (4.5,-2.5) {\bf Subprocess (Bash/Zsh)};
+        \draw[->, thick, >=stealth, color=primary] (ctrl.250) -- node[left] {\small Exec} (shell.110);
+        \draw[<-, thick, >=stealth, color=primary] (ctrl.290) -- node[right] {\small Output} (shell.70);
+    \end{tikzpicture}
+    \caption{The \texttt{doit} architecture: the Controller wraps the LPU. The LPU only emits structured decisions from context, while the Controller owns all state, safety, and execution --- it is the only component that touches the shell or replies to the user.}
+    \label{fig:architecture}
+\end{figure}
+
+Rather than defining tools for specific commands (e.g., \texttt{ls} or \texttt{grep}), our agent uses a unified set of five universal tools: \texttt{run\_command}, \texttt{ask\_user}, \texttt{answer}, \texttt{remember}, and \texttt{change\_dir}. We structure this report to follow the exact sections defined in the assignment specifications, detailing the design decisions, implementation details, log evidence, and limitations encountered for each module.
+
+\subsection{Context Assembly and Code Mapping}
+\label{sec:context_mapping}
+Every block of context defined in our formal Agent Context Description Language (ACDL) schemas maps directly to a named Python function in the \texttt{doitlib/context.py} module:
+\begin{itemize}
+    \item \texttt{AGENT\_INSTRUCTIONS} $\longleftrightarrow$ \texttt{context.agent\_instructions()}
+    \item \texttt{env.cwd}, \dots $\longleftrightarrow$ \texttt{context.environment\_block()}
+    \item \texttt{env.history} $\longleftrightarrow$ \texttt{context.history\_messages()}
+\end{itemize}
+This precise mapping guarantees that the formal specifications reflect the actual runtime context injected into the LPU during each turn loop execution. Figure~\ref{fig:context_map} represents this context assembly process.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}[
+        node distance=0.8cm and 1.5cm,
+        block/.style={draw=primary, fill=background, rectangle, minimum width=6.5cm, align=left, font=\small, thick},
+        container/.style={draw=accent, dashed, rectangle, inner sep=10pt, thick}
+    ]
+        % System block
+        \node[block] (system) {
+            \textbf{System Instructions (S:)} \\
+            - \texttt{context.agent\_instructions()} \\
+            - Tool schemas (Native / Prompted text)
+        };
+
+        % Environment block
+        \node[block, below=of system] (env) {
+            \textbf{Environment Block (U:)} \\
+            - CWD, active shell type, OS version \\
+            - Current date and time
+        };
+
+        % History block
+        \node[block, below=of env] (hist) {
+            \textbf{Replayed History turns (Last K=10) (U: / A:)} \\
+            - Past user requests and tool executions \\
+            - Cold-truncated outputs (Tiered Budgets)
+        };
+
+        % Current input
+        \node[block, below=of hist, fill=accent!10, draw=accent] (curr) {
+            \textbf{Current Request (U:)} \\
+            - \texttt{doit "now sort them by date"}
+        };
+
+        % Fit container
+        \begin{scope}[on background layer]
+            \node[container, fit=(system) (env) (hist) (curr)] (ctx) {};
+            \node[above=0.1cm of ctx, font=\bfseries\color{accent}] {ACDL Prompt Context Assembly};
+        \end{scope}
+    \end{tikzpicture}
+    \caption{LPU input context block mapping.}
+    \label{fig:context_map}
+\end{figure}
+
+\newpage
 
 % SECTION 2: SINGLE COMMAND AT A TIME
 \section{Single command at a time.}
