@@ -1,108 +1,110 @@
 # Report fix TODO — grouped by mission type
 
-Companion to REPORT_REVIEW.md. Check off as you go. Owner column: split as you like; "run" tasks need a real machine with the shell hooks installed.
+Companion to REPORT_REVIEW.md. Check off as you go.
 
-## A. Add textual ACDL (highest impact, lowest effort)
+---
 
-- [ ] A1. All sections (1.4, 2.4, 3.4, 4.4, 5.5, 7.5, 8.5, 10.4, 11.5): paste the corresponding `acdl/*.acdl` source as a code listing **next to each figure** (or as Appendix A with per-figure references).
-- [ ] A2. Fix `SAFTY_INSTRUCTIONS` → `SAFETY_INSTRUCTIONS` in the .acdl source, re-render, re-screenshot Figure 5.
-- [ ] A3. Decide on `env.history` vs `sys.history` (ACDL reference: action histories are `sys.*`) — apply consistently across all specs, re-render affected figures.
-- [ ] A4. Section 9: add one line pointing to the history ACDL ("output awareness reuses the replay context of Fig. 4; truncation budgets shown there") or give it its own small spec.
+## STATUS SUMMARY (updated 2026-08-09)
 
-## B. Add prompts, tool definitions, schemas (explicitly required)
+**Done this session (in `report/report.tex` unless noted):**
+- **A (ACDL):** A1 ✅ (listings next to every figure), A2 ✅ (SAFTY→SAFETY, re-rendered), A3 ✅ (`sys.history` across all specs). ACDL specs fully rewritten to the context-only convention.
+- **B (prompts/schemas):** B1 ✅, B2 ✅, B3 ✅ — Appendix A now has: real base prompt + per-version deltas (from git) + full final prompt, all 7 `prompts/*.txt`, the 8-tool table + full `TOOL_SCHEMAS` from `tools.py`.
+- **C (real logs):** C1–C11 ✅ all covered (logs on disk + curated).
+- **D (model comparison):** D1 ✅ (results table now in §4), D3 ✅ (logged numbers in §4). Data source: `report/model_comparison_data.md`.
+- **G:** G2 ✅ (staged §11/§12/§2 examples replaced with real logs), G3 ✅ (listings sit next to each figure).
+- **H:** H10a/b/c ✅ (v1 ACDL fixed), H14 ✅ (real guard-override + 6/15 tally in §2).
 
-- [ ] B1. New Appendix B: full system prompt template(s) — base + the prompted-adapter variant with the JSON-only instruction.
-- [ ] B2. Appendix B: contents of every `prompts/*.txt` referenced in the report (memory_block, user_shell_history_block, other_sessions_block, plan/clarify templates).
-- [ ] B3. Appendix B: the 8 tool signatures in one table (run_command, answer, ask_user, remember, forget, change_dir, read_session, plan) + the JSON decision schema for the prompted adapter.
-- [ ] B4. Section 1 (or new §0): reference the appendix on first use ("full templates in Appendix B").
+**Still needed — see groups below.** Biggest gaps: §0 overview (E), Conclusion + Intro (F7/H4), title-page diagram fix (H1/H2), TOC (H3). Per-section Limitations (F1–F6b) are now DONE — added to §2/§3/§4/§5/change_dir/§10/§11/§12 in `report.tex` (§6/§7/§9 already had them).
 
-## C. Run & add real logs (replace staged/hypothetical ones)
+> **Compile note:** no LaTeX on the dev machine — the `.tex` has NOT been compiled/verified yet. `cd report && pdflatex report.tex` ×2 (or Overleaf with `report/`+`acdl/`+`prompts/`+`doitlib/` siblings). Watch the first run for errors.
 
-**Log-archive audit (2026-07-12):** `bash-llm-agent/logs/` already covers most C tasks — the report just never used them. Status per task: ✅ = exists, paste it; ⚠ = partial; ❌ = must run.
+---
 
-**No old code versions needed for before/after.** All "before" evidence was captured live when the bugs happened; the pairs already on disk:
-- phase5: `live_richer_interactions_history_bleed.txt` (before) ↔ `live_richer_interactions_fixed.txt` (after). Note: `live_richer_interactions_retest_after_prompt_fix.txt` is an *intermediate failed* fix attempt (a rule-conflict fix that DID NOT work) — optionally show it as the middle of a before→failed-attempt→fixed story, but it is NOT the "after".
-- phase6_5: `live_change_dir.txt` TEST 3 attempt 1 (wrong-dir `ls`, before) ↔ retest (after), plus the unrequested-`ls` incident + fix at the end of the same file
-- phase9: `live_budget_exhaustion_found_pre_fix.txt` (before) ↔ `live_plan_chain_gpt4omini.txt` (after)
-- phase6: `behavior_issue.txt` (pre-P6e wrong forget-target) ↔ `live_remaining_cases.txt` BONUS retarget (after)
-These pairs are ready-made "what didn't work → how we fixed it" content (feeds F7 too).
+## A. Textual ACDL
 
-- [x] C1. ✅ **COVERED** — `phase9/live_retry_stat_gpt4omini.txt`: real BSD/GNU failure (`stat --format` → exit 1 → retried with `stat -f '%m'`). Also `live_plan_recovery_stop_gpt4omini.txt` (empty `find` → graceful stop, no blind plowing). Paste into §11.4, delete the hypothetical paragraph.
-- [x] C2. ✅ **COVERED** — `phase8/live_two_window_gpt4omini.txt`: real ids (p8win1/p8win2), implicit-reference PASS + explicit cross-reference test, raw outputs. Replace §10.3's staged listing.
-- [x] C3. ✅ **COVERED** — `phase6/good_interaction_memo.txt`: `doit "tell me a joke"` → "I'm a shell command agent and can't tell jokes...". Paste into §1.3.
-- [x] C4. ✅ **COVERED** — `phase3/cmp_gpt4omini.jsonl`: "make my laptop fly" → `answer` tool, "I'm a shell command agent and cannot help with that." Render as a transcript for §1.3/§3.3 (correct-behavior counterpart to gemma3's failure).
-- [x] C5. ✅ **COVERED** — `phase7/live_runs_from_anywhere_gpt4omini.txt`: `cd /tmp && doit "what directory am I in?"` → "You are currently in the `/private/tmp` directory." Invoked from outside the repo (proves PATH tool works anywhere); answered from the env/context block (`tools: []`, no `pwd` needed — cwd-awareness comes from the injected context, verified in the session jsonl `cwd: /private/tmp`).
-- [x] C6. ✅ **COVERED** — confirmed absent from all prior `*.jsonl`, then captured live: `phase6_5/live_dual_trigger_gpt4omini.txt`. One sentence ("cd into doitlib — and by the way this whole project is my university LLM course assignment") fired BOTH tools in one turn (`['change_dir','remember']`, verified in the session jsonl), the real shell moved (`bash-llm-agent %` → `doitlib %`), and the durable fact persisted as memory `[m4]` while the transient move did not.
-- [x] C7. ✅ **COVERED** — `phase6/live_remaining_cases.txt` BONUS: "I changed my mind about the sort order — ask me each time" → `forgot m1` + `remembered [m3]`, unrelated m2 untouched. Assignment's exact revision case. Paste into §7.3.
-- [x] C8. ✅ **COVERED** — `phase7/live_summarize_gpt4omini.txt`: real zsh hook, "summarize what I just did" with the shell_hist dump proving provenance (+ honest setup-bug note). Paste into §8.3; also `live_cases_45_46_47` (failure recall, cwd, user-vs-doit distinction).
-- [x] C9. ✅ **COVERED** — `phase9/live_output_awareness_followup_gpt4omini.txt`: listing → "which of these is safe to delete?" answered by RUNNING `file`/`du` (not a blind answer). Bonus: the plans-on run captured the `plan` tool genuinely lifting `max_steps=1` (3 run_commands in one turn, verified in the session jsonl) + a plan+ask_user composition. Two honest limitations recorded in the log footer: single-command batching is non-deterministic, and the delete verdict itself was shaky (reasoned from `file` type/size, ignored obvious name cues).
-- [x] C10. ✅ **COVERED** — `phase4/live_multiturn_gpt4omini.txt`: full refinement chain (list → by date → ascending → "by creation time" answered honestly as a BSD limitation — a great limitations exhibit). Paste; optionally add one literal "no, I meant..." turn.
-- [x] C11. ✅ **COVERED** — `phase5/live_default_and_no_ask.txt`: genuine ambiguity ("clean up my stuff") → options menu → blank-Enter default → stacked y/N gate → abort; PLUS anti-annoyance negative case (unambiguous request, no question). Replace §5.4's are-you-sure example. Note: MAX_CLARIFICATIONS=2 cap never exercised live (the log says so) — either capture one or state it as untested.
+- [x] A1. ✅ DONE — `acdl/*.acdl` source shown as `\lstinputlisting` next to every figure (auto-syncs).
+- [x] A2. ✅ DONE — `SAFETY_INSTRUCTIONS` spelling fixed in source; figures re-rendered by Yuval.
+- [x] A3. ✅ DONE — settled on `sys.history` (corpus: action histories are `sys.*`), applied to all specs.
+- [ ] A4. §10 (output awareness): add one line pointing to the history ACDL (output awareness reuses the replay context of the history figure; truncation budgets shown there). *(Prose — small.)*
 
-**Bonus finds for other groups:** `phase2/safety_guard_results.json` + `guard_bypass_tests.json` → guard-override numbers for D3/F7; `phase3/prompted_adapter_results.json` → parse/retry rates for D3; `phase3/*_native.txt` vs `*_prompted.txt` → qwen3-vs-gemma3 material for D2; offline suite tallies (change_dir 10/10, memory 14/14, clarify 12/12, history 10/10, prompted 10/10 in `phase6_5/live_change_dir.txt` footer) → D1 results table.
+## B. Prompts, tool definitions, schemas
 
-## D. Model comparison (required content, currently a stub)
+- [x] B1. ✅ DONE — Appendix A: real base prompt + per-version git deltas + full final `system_prompt.txt` + prompted-adapter `prompted_suffix.txt`/`prompted_retry.txt`.
+- [x] B2. ✅ DONE — all 7 `prompts/*.txt` included (`environment_block`, `memory_block`, `user_shell_history_block`, `other_sessions_block`, + the three above).
+- [x] B3. ✅ DONE — 8-tool signature table + JSON decision shape + full `TOOL_SCHEMAS` listing (`doitlib/tools.py` lines 36–282).
+- [ ] B4. §1 (or new §0): add a one-line forward-reference to Appendix A on first mention of the prompt/tools. *(Prose — small.)*
 
-**DATA READY:** all runs done (2026-07-12) + graded — `report/model_comparison_data.md` (table, qwen-vs-gemma diffs with real shell output, logged numbers). Transcripts: `logs/phase3/{gpt4omini,qwen3,gemma3,gemma3_2}.txt`. Remaining work is writing the report prose around this data.
+## C. Real logs
 
-- [x] D1. ✅ **DATA READY** — results table (P/~/F per case per model) in `report/model_comparison_data.md`; gpt-4o-mini 10/13 > qwen3 7/13 > gemma3 6/13 over cases 1–8 + 56–60. Paste into §3.2.
-- [x] D2. ✅ **DATA READY** — qwen-wins-gemma-fails on the SAME case captured with real output: case 57 (qwen correct word-freq vs gemma mis-flags read-only pipeline as destructive & aborts), case 3 (qwen refuses vs gemma runs `df`), plus gemma run-to-run instability (joke told/refused across the two runs) and native-vs-prompted JSON reliability. Write the §3.3 discussion from `report/model_comparison_data.md` D2 section.
-- [x] D3. ✅ **DATA READY** — guard overrode model 6/15 (`phase2/safety_guard_results.json`); prompted-adapter 10/10 offline (`phase3/prompted_adapter_results.json`); live JSON failures: qwen 0, gemma 1 recovered + 1 hard-fail. Numbers + example override in `report/model_comparison_data.md` D3. Paste into §3.3.
-- [ ] D4. §3.1: one sentence explaining the 4B choice (assignment allows 4B tier; hardware/latency rationale) — the plan originally named 7–8B models. (Material noted in `report/model_comparison_data.md` D4; user writes the sentence.)
-- [x] D5. ✅ **DATA READY** — qwen3 native adapter: no tool-call protocol breakage; only quirk = behavioral over-caution (case 1 refused a `/tmp` sandbox). Note in `report/model_comparison_data.md` D5; drop into §3.1.
+**All done.** C1–C11 ✅ (evidence on disk; the real ones are now spliced into §2/§4/§11/§12 — see G2). Remaining "paste into section X" notes are absorbed into the prose still owed for those sections.
 
-## E. Elaborate the architecture
+*(Ready-made before/after pairs for the Conclusion / F7, still on disk: phase5 history-bleed↔fixed; phase6_5 wrong-dir↔retest; phase9 budget-exhaustion↔plan-chain; phase6 wrong-forget↔retarget.)*
 
-- [ ] E1. New §0 "System overview" (~1 page): Controller-wraps-LPU principle, the loop diagram (reuse title-page figure), and the rule "every feature = tool | context block | controller logic".
-- [ ] E2. §0: final tool inventory table — all 8 tools in one place with one-line purposes (currently scattered across sections).
-- [ ] E3. §0: `~/.doit/` state layout tree (sessions/, memories.json, shell_hist/, logs/) + repo structure.
-- [ ] E4. §0: one paragraph on the logging infrastructure (raw LLM traffic in logs/ as report evidence) + where submitted logs live.
-- [ ] E5. §1: state which system-prompt blocks exist at v1 (instructions, env block, tools) and forward-reference how later sections only *add context blocks* — the report's best architectural argument, currently implicit.
+## D. Model comparison
 
-## F. Limitations & conclusion
+- [x] D1. ✅ DONE — per-case results table (V/~/X, 10/7/6) is in §4 "Case-by-Case Results".
+- [ ] D2. ⚠ PARTIAL — the case-57 qwen-vs-gemma split + reliability numbers are in §4, but a fuller qwen-vs-gemma **discussion paragraph** is still light. *(Prose — expand from `report/model_comparison_data.md` D2.)*
+- [x] D3. ✅ DONE — logged numbers (guard 6/15, parser 10/10, live JSON failures) are in §4 "Logged Reliability Numbers".
+- [ ] D4. §3/§4: one sentence on the 4B choice (assignment allows 4B tier; hardware/latency; the plan originally named 7–8B). *(Prose — one sentence.)*
+- [ ] D5. ⚠ note the qwen native quirk (over-caution: refused a `/tmp` sandbox) — material in `model_comparison_data.md` D5; not yet in report prose.
 
-- [ ] F1. §1: limitation — cd silently no-ops if the shell snippet isn't installed (mitigated by DOIT_SESSION warning).
-- [ ] F2. §2: limitations — regex false positives (`grep "rm -rf" notes.txt`), blind spots (`$(...)` substitution, `xargs rm`), and that sudo/interactive detection is prefix-based.
-- [ ] F3. §4: limitation — K=10 window: turns older than 10 are forgotten entirely (mention compaction as the described-but-unimplemented remedy).
-- [ ] F4. §5: limitation — empty-input default on a *read-only* command can still surprise; Ctrl-C path only logged, not user-tested at scale.
-- [ ] F5. §9: limitation — head/tail truncation loses mid-output content; note the injection surface (shell output entering the prompt is user-controlled text).
-- [ ] F6. §10: limitations — 24h recency filter; heuristic one-line summaries can be too thin for faithful cross-session task copying.
-- [ ] F7. New final section "Conclusion & what didn't work": synthesis with logged numbers (guard overrides, parse retries), the 2–3 things that surprised you, and honest system limits.
+## E. Architecture overview (§0) — NOT STARTED
+
+- [ ] E1. New §0 "System overview" (~1 page): Controller-wraps-LPU principle, the loop, the rule "every feature = tool | context block | controller logic". *(Prose + I can scaffold.)*
+- [ ] E2. §0: final 8-tool inventory table — **reuse the table now in Appendix A** (move/duplicate a compact version up front). *(I can do.)*
+- [ ] E3. §0: `~/.doit/` state-layout tree (sessions/, memories.json, shell_hist/, logs/) + repo structure. *(I can do.)*
+- [ ] E4. §0: one paragraph on the logging infrastructure (raw LLM traffic in `logs/` as evidence) + where submitted logs live. *(Prose.)*
+- [ ] E5. §1: state which system-prompt blocks exist at v1 and forward-reference how later phases only *add* context blocks. *(Prose.)*
+
+## F. Limitations (per section) & Conclusion — PER-SECTION DONE (F1–F6b); F7 Conclusion still owed
+
+The assignment requires **limitations for each section**. Add a short Limitations block where missing.
+- [x] F1. ✅ DONE — change_dir section: cd silently no-ops if the shell snippet isn't installed (+ path checked at decision time). Added as a `\paragraph{Limitations.}`.
+- [x] F2. ✅ DONE — §2 (dangerous commands): regex false positives (`grep "rm -rf" notes.txt`), blind spots (`$(...)`, `xargs rm`), prefix-based sudo/interactive detection (`ssh -p 2222 host`).
+- [x] F3. ✅ DONE — §4 (multi-turn): K=10 window drops older turns entirely (compaction described-but-unimplemented); + DOIT_SESSION="default" fallback.
+- [x] F4. ✅ DONE — §5 (clarifications): read-only empty-input default can surprise; Ctrl-C path only logged; MAX_CLARIFICATIONS=2 forces a guess.
+- [x] F5. ✅ DONE — §10 (output awareness): head/tail truncation loses mid-output + prompt-injection surface (shell output is user-controlled text).
+- [x] F6. ✅ DONE — §11 (multi-tasking): 24h recency filter; thin one-line summaries need `read_session` for faithful copying.
+- [x] F6b. ✅ DONE — §3 (model flexibility: weakest-model bound, one-shot JSON retry, model quirks) and §12 (plans: budget exhaustion, one-shot retry, pipeline-masked failures, weak-model plan gating).
+- [ ] F7. New final **Conclusion** section: synthesis with logged numbers (guard overrides, parse retries), 2–3 surprises, honest limits. Report currently has NO conclusion. *(Separate section, not a per-section limitation — still owed.)*
 
 ## G. Small mechanical fixes
 
-- [ ] G1. Fix Figure 6 caption collision on p.13 (LaTeX float placement — `[H]` or move the figure).
-- [ ] G2. Sweep all listings for staged artifacts (bracketed narration, invented ids) — C1/C2 cover the known ones.
-- [ ] G3. Verify every "detailed in the visual ACDL diagram below" phrase now also references the textual listing (after A1).
+- [ ] G1. Check for a figure caption collision / float placement issue once compiled (all figures use `[H]`; verify after first build).
+- [x] G2. ✅ DONE — staged/hypothetical listings (§11 bracketed narration, §12 self-correction, §2 guard claim) replaced with real logs.
+- [x] G3. ✅ DONE — every ACDL figure is immediately followed by its textual listing.
 
-## H. Partner review notes (Yuval + Arbel, 2026-07-12)
-
-Overlaps with earlier groups are cross-referenced, not duplicated.
+## H. Partner review notes (Yuval + Arbel)
 
 ### Title page & front matter
-
-- [ ] H1. Title page: remove the architecture diagram from the cover.
-- [ ] H2. Fix the diagram and move it into the report body (fits the new §0 overview, → E1): **add the missing arrow from Controller back to User** (output/answer path — currently the loop never returns anything to the user).
-- [ ] H3. Add a table of contents.
-- [ ] H4. Add an introduction (→ E1).
+- [ ] H1. Remove the architecture diagram from the cover. *(I can do.)*
+- [ ] H2. Move the diagram into §0 and **add the missing Controller→User arrow** (output/answer path). *(I can do the TikZ.)*
+- [ ] H3. Add a table of contents (`\tableofcontents`). *(I can do.)*
+- [ ] H4. Add an introduction. *(Prose.)*
 
 ### Section 1 (single command)
-
-- [ ] H5. State the available tools for the model at this stage (run_command, answer) in §1 body (→ E2, E5).
-- [ ] H6. Show the system prompt used in §1 (→ B1; at minimum a short excerpt inline + full text in the appendix).
-- [ ] H7. Make the model explicit in the §1 narrative: examples were run with openai/gpt-4o-mini (currently only in the decision box).
-- [ ] H8. Example listings expose repo internals (CLAUDE.md, DECISIONS.md rows in Listing 1): re-run the §1 demos in a neutral demo directory with generic files (e.g. tests.py, notes.txt) — **Arbel**. (Also check what the course policy requires about disclosing AI assistance — that's a submission question, separate from demo hygiene.)
-- [ ] H9. Add failings/issues subsection to §1 (→ F1).
-- [ ] H10. §1 ACDL fixes — **Yuval**:
-  - [ ] H10a. `change_dir` reference: move/remove it from the v1 spec (change_dir doesn't exist until later phases; the v1 AVAILABLE_TOOLS comment should list only run_command, answer).
-  - [ ] H10b. Clarify in the spec (comment) where tools travel: for the **native** adapter they go out-of-band via the API `tools=` parameter, NOT inside the S: prose; only the **prompted** adapter (Fig. 3) embeds them in the system prompt. Fig. 1 currently shows AVAILABLE_TOOLS inside S:, which is only accurate for the prompted variant — annotate or split.
-  - [ ] H10c. Verify "two separate U: messages" (ENV_INFO and user_request as separate user messages in Fig. 1) matches what the code actually sends — check `build_messages` / raw logs; make spec match code (found in the raw log: they ARE two separate user messages — confirm and add a comment saying it's intentional).
-- [ ] H11. Insert real logs into §1 (→ C3, C4, C5).
-- [ ] H12. Insert a raw model-communication snippet in §1: one request/response JSON from `logs/phase1/llm_raw_p1demo.jsonl` (trimmed), showing the tool_calls object the controller parses.
+- [ ] H5. State the available tools at this stage (run_command, answer) in the §1 body. *(Prose — small.)*
+- [ ] H6. Show/reference the §1 system prompt (now in Appendix A — add a short excerpt or pointer). *(Prose — small.)*
+- [ ] H7. Make the model explicit in the §1 narrative (`openai/gpt-4o-mini`), not only in the decision box. *(Prose — small.)*
+- [ ] H8. **BEFORE SUBMIT (Arbel):** §1/§5/§10 example listings leak repo internals (`CLAUDE.md`, `DECISIONS.md`) — re-run those demos in a neutral folder with generic files.
+- [ ] H9. Add a failings/issues subsection to §1 (= F1).
+- [x] H10a. ✅ DONE — v1 spec lists only `run_command, answer` (change_dir removed).
+- [x] H10b. ✅ DONE — v1 annotates that native tools travel out-of-band via `tools=` (only the prompted adapter embeds them).
+- [x] H10c. ✅ DONE — v1 shows ENV_INFO and user_request as two separate `U:` messages (matches `build_messages`).
+- [ ] H11. Insert the real §1 logs (joke refusal C3, impossible-request C4, runs-from-anywhere C5) into §1. *(Overlaps H8 — do after neutral-dir re-run.)*
+- [ ] H12. Insert a trimmed raw request/response JSON in §1 from `logs/phase1/llm_raw_p1demo.jsonl` (shows the `tool_calls` object). *(I can do.)*
 
 ### Section 2 (dangerous commands)
+- [ ] H13. Box-title style: drop the "Design Decision:" prefix, or make box titles consistent report-wide. *(Minor.)*
+- [x] H14. ✅ DONE — real guard-override example (`ls > files.txt`) + 6/15 tally added to §2.
+- [ ] H15. **BEFORE SUBMIT:** manually re-run the §2 safety flow end-to-end (destructive confirm, guard override, sudo refusal, interactive refusal) to confirm current behavior.
+- [ ] H16. §2 ACDL: enumerate `run_command`'s `is_destructive`+`explanation` args in the AVAILABLE_TOOLS comment (the safety-relevant schema is the point of §2). *(Small — the full schema is already in Appendix A.)*
 
-- [ ] H13. Drop the "Design Decision:" prefix from box titles (or make the box style consistent report-wide — pick one and apply everywhere).
-- [ ] H14. The claim "If the guard overrides the model's safety flag, the event is logged for analysis" — back it with a real example or delete it. A real override + counts exist in `logs/phase2/safety_guard_results.json` / `guard_bypass_tests.json` (→ D3): paste one override event and the tally.
-- [ ] H15. Re-run the §2 safety flow manually end-to-end ourselves (destructive confirm, guard override, sudo refusal, interactive refusal) to verify current behavior before final submission.
-- [ ] H16. §2 ACDL: include the tool definitions in the spec (AVAILABLE_TOOLS comment should enumerate run_command with is_destructive+explanation args — the safety-relevant schema is the point of this section).
+## Z. Before submission (final checklist)
+
+- [ ] Z1. **Add the test cases:** include `tests/cases.md` (the fixed ~15+ case suite the models were run against) in the report — e.g. as an appendix listing — so graders can see exactly what was tested. *(I can add via `\lstinputlisting`/table.)*
+- [ ] Z2. H8 — re-run §1/§5/§10 demos in a neutral folder (no repo internals). **Arbel.**
+- [ ] Z3. H15 — manual end-to-end safety re-run.
+- [ ] Z4. Compile the PDF (`cd report && pdflatex report.tex` ×2, or Overleaf) and fix any listing/UTF-8 errors.
+- [ ] Z5. Check the course's **AI-assistance disclosure** policy and comply.
+- [ ] Z6. Final read-through for the owed prose: Intro (H4), §0 overview (E), per-section Limitations (F), Conclusion (F7), D2/D4 sentences.

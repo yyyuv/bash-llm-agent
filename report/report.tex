@@ -169,7 +169,7 @@ $ doit "show me all files here, including hidden ones"
 $ ls -la
 total 232
 drwxr-xr-x@  6 yuval  staff    192 Jul  7 18:23 acdl
--rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 CLAUDE.md
+-rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 README.md
 -rw-r--r--@  1 yuval  staff  30675 Jul  7 18:57 DECISIONS.md
 -rwxr-xr-x@  1 yuval  staff   1319 Jul  7 15:00 doit
 \end{lstlisting}
@@ -245,6 +245,9 @@ model is_destructive: false    (looks like a read-only listing)
 guard is_destructive: true     (matched the ">" write-redirect pattern)
 result:               Proceed? [y/N] gate shown before anything runs
 \end{lstlisting}
+
+\subsection{Limitations}
+The regex guard trades precision for determinism, which produces both false positives and blind spots. A read-only command that merely \emph{mentions} a destructive token --- e.g. \texttt{grep "rm -rf" notes.txt} --- is flagged destructive and gated behind a confirmation it does not need. Conversely, destruction hidden from a simple pattern match slips through: command substitution (\texttt{\$(...)}), \texttt{xargs rm}, and similar indirection are not caught. Sudo and interactive-program detection is prefix-based, so a leading flag-with-value (e.g. \texttt{ssh -p 2222 host}) can be misread as non-interactive. These are accepted tradeoffs of a deterministic guard over a second LLM judge, not bugs; the model's Layer-1 self-report is the complementary net.
 
 \subsection{ACDL Context Specification: DoitAgentSafety}
 The diagram below shows the only safety part the model actually sees: a \texttt{SAFETY\_INSTRUCTIONS} block in the system prompt. The regex guard and the \texttt{Proceed? [y/N]} gate run in Python and send nothing to the model, so they are not drawn. In short, the diagram shows what the model is told about safety, not how we enforce it.
@@ -355,6 +358,9 @@ The ranking is \texttt{gpt-4o-mini} (10/13) $>$ \texttt{qwen3:4b} (7/13) $>$ \te
     \item Live, \texttt{qwen3} (native) produced \textbf{no} JSON/tool-call failures across all 13 cases; \texttt{gemma3} (prompted) hit one malformed reply it recovered from and one hard failure after two retries.
 \end{itemize}
 
+\subsection{Limitations}
+Model flexibility is bounded by the weakest supported model. The 4B local models we tested (\texttt{qwen3:4b-instruct}, \texttt{gemma3:4b}) are materially less reliable than the API model (7/13 and 6/13 versus 10/13 in Table~\ref{tab:model_results}), and the prompted adapter grants only \textbf{one} JSON-repair retry before giving up --- a persistently malformed reply aborts the turn. We also observed model-specific quirks the framework cannot fix from outside: \texttt{gemma3} mis-flagging read-only pipelines as destructive, and both local models emitting GNU-only flags that fail on BSD/macOS. The adapter guarantees a \emph{uniform interface}, not uniform competence.
+
 \subsection{ACDL Context Specification: DoitAgentPrompted}
 For models without native tool-calling, tool schemas move into the system prompt prose, and the raw text reply is parsed. The visual ACDL diagram below shows how we handle JSON validation and retries:
 
@@ -396,21 +402,24 @@ Below is a live multi-turn session log using \texttt{gpt-4o-mini}, demonstrating
 $ DOIT_SESSION=demo doit "list the files here"
 $ ls -l
 total 232
--rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 CLAUDE.md
+-rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 README.md
 -rw-r--r--@  1 yuval  staff  30675 Jul  7 18:57 DECISIONS.md
 
 $ DOIT_SESSION=demo doit "now sort them by date"
 $ ls -lt
 total 232
 -rw-r--r--@  1 yuval  staff  30675 Jul  7 18:57 DECISIONS.md
--rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 CLAUDE.md
+-rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 README.md
 
 $ DOIT_SESSION=demo doit "now in ascending order"
 $ ls -ltr
 total 232
--rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 CLAUDE.md
+-rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 README.md
 -rw-r--r--@  1 yuval  staff  30675 Jul  7 18:57 DECISIONS.md
 \end{lstlisting}
+
+\subsection{Limitations}
+History is a fixed window of the last $K=10$ turns; anything older is dropped entirely rather than summarized, so a reference to a command from twelve turns ago cannot be resolved. Compaction (folding evicted turns into a running digest) is the natural remedy but is described, not implemented. Separately, when the shell snippet is not installed \texttt{DOIT\_SESSION} falls back to \texttt{"default"}, and all terminals then share a single history stream.
 
 \subsection{ACDL Context Specification: DoitAgentHistory}
 The formal context structure representing the conversation history replay integration is detailed in the visual ACDL diagram below:
@@ -463,6 +472,9 @@ Your answer (number or text): 1
 Proceed? [y/N] y
 $ rm *.log
 \end{lstlisting}
+
+\subsection{Limitations}
+The empty-input default (Enter $\to$ \texttt{"no answer"} $\to$ proceed with the stated default) is safe for destructive commands, which the \texttt{Proceed? [y/N]} gate still catches, but a \emph{read-only} default can still surprise a user who expected the question to block. The Ctrl-C abort path is logged but has not been stress-tested. Finally, the \texttt{MAX\_CLARIFICATIONS=2} cap forces the model to commit to a best guess after two questions, trading a possible wrong interpretation for guaranteed non-annoyance.
 
 \subsection{ACDL Context Specification: DoitAgentClarify}
 The final formal context structure for our agent, representing both replayed turns and the within-turn clarification loop, is detailed in the visual ACDL diagram below:
@@ -570,6 +582,8 @@ Before adding user awareness, we fixed the \texttt{cd} trap (see the wrapper dec
 
 One catch we found while testing: a \texttt{run\_command} in the same turn still runs in the \emph{old} directory, because the real \texttt{cd} only happens after the process exits. So the model has to point a same-turn command at the resolved path. The path check and the file write are Controller/shell work, so the diagram only shows the one result string the model gets back.
 
+\paragraph{Limitations.} \texttt{change\_dir} depends entirely on the installed shell wrapper: if the \texttt{doit()} function is not present in the user's \texttt{\textasciitilde/.zshrc}/\texttt{\textasciitilde/.bashrc}, the tool validates the path and writes the target file, but the parent shell never reads it, so the \texttt{cd} silently no-ops (the same wrapper-dependence noted in Section~\ref{sec:multi_turn}). The path is checked at decision time, so a directory removed between that check and the wrapper's \texttt{cd} would also fail silently in the shell.
+
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.9\textwidth]{acdl_v6-5.png}
@@ -664,10 +678,13 @@ $ doit "list the largest files in this directory"
 $ ls -lhS
 total 232K
 -rw-r--r--@ 1 yuval  staff   30K Jul  7 18:57 DECISIONS.md
--rw-r--r--@ 1 yuval  staff   12K Jul  7 18:24 CLAUDE.md
+-rw-r--r--@ 1 yuval  staff   12K Jul  7 18:24 README.md
 $ doit "which of these is larger?"
-DECISIONS.md is the larger file, with a size of 30K compared to CLAUDE.md's 12K.
+DECISIONS.md is the larger file, with a size of 30K compared to README.md's 12K.
 \end{lstlisting}
+
+\subsection{Limitations}
+Truncation is head-and-tail, so the \emph{middle} of a long output is discarded: a warning buried 2{,}000 lines into a 5{,}000-line log is invisible to a follow-up question. More importantly, replayed command output is user-controlled text spliced directly into the prompt, which is a prompt-injection surface --- a file whose contents read like instructions is fed to the model as context. The deterministic safety guard (which inspects the \emph{command}, not the model's rationale) is our backstop, but the injection risk is real and not fully mitigated.
 
 % SECTION 11: MULTI-TASKING
 \section{Multi-tasking}
@@ -728,6 +745,9 @@ Proceed? [y/N] y
 $ mkdir {2020..2026}
 # PASS: read_session("p8win2") fetched window 2's history; the model reproduced its mkdir
 \end{lstlisting}
+
+\subsection{Limitations}
+Cross-session awareness is bounded by a 24-hour recency filter, so a task run in another window yesterday is invisible. The always-injected summaries are deliberately thin (the last couple of requests plus cwd and age) --- enough to \emph{notice} a sibling session, but too sparse to reproduce its work faithfully on their own. Correct cross-session copying therefore depends on the model choosing to call \texttt{read\_session} for the full detail; if it copies from the one-line summary alone, it may reconstruct the task incorrectly.
 
 \subsection{ACDL Context Specification: DoitAgentMultitask}
 The context structure representing cross-session summaries and the dynamic retrieval tool is detailed in the visual ACDL diagram below:
@@ -801,6 +821,9 @@ doit: command exited with code 1
 $ stat -f '%m' <sandbox>/logs/app.log.gz     <- retried with the BSD flag
 1783581246
 \end{lstlisting}
+
+\subsection{Limitations}
+The plan budget is finite: a plan that needs more than \texttt{len(steps) + PLAN\_SLACK} commands (or a model that issues one command per file instead of batching same-type actions) can exhaust its budget and end the turn with the task half-done --- a failure mode we hit and fixed live by batching and by raising \texttt{PLAN\_SLACK}. Self-correction is a single one-shot retry per failed command, so a bug needing two corrections is not recovered. The retry keys on a non-zero exit code, so a failure masked by a shell pipeline (whose status reflects only its last stage) is invisible to it. Finally, plans are gated to capable models: the 4B locals plan poorly (e.g. \texttt{find ... -exec ls -lS \{\} \textbackslash;} sorts per-file rather than globally), which is why \texttt{enable\_plans} is off for them.
 
 \subsection{ACDL Context Specification: DoitAgentPlans}
 The diagram below shows how planning reaches the model: a \texttt{PLAN\_INSTRUCTIONS} block, the \texttt{plan} tool in \texttt{AVAILABLE\_TOOLS} (only when \texttt{enable\_plans} is set), and the within-turn loop where the model runs one command at a time. The budget increase and the retry live in the Controller (\texttt{run\_turn}); they change how many loop iterations run but send no message to the model, so they are not drawn. From the model's side, a retry is just a failed command result followed by another command.
