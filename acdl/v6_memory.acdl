@@ -11,19 +11,17 @@ DoitAgentMemory[@T, I]: {
     AGENT_INSTRUCTIONS
     SAFETY_INSTRUCTIONS
     CLARIFICATION_INSTRUCTIONS
-    MEMORY_INSTRUCTIONS                              // store durable facts only
+    MEMORY_INSTRUCTIONS                  // store durable facts only
     AVAILABLE_TOOLS(run_command, ask_user, answer, remember, forget)
   }
   U: {
     ENV_INFO(env.cwd[@T], env.datetime[@T], env.shell[@T], env.os[@T])
   }
-
   // all stored facts, every turn, each with its [id]
   U: {
     MEMORY_HEADER
     ForEach(m: sys.memories) { sys.memory_line[m] }  // "- [<id>] <text>"
   }
-
   // replay the last K turns of THIS session as chat
   ForEach(@t: range(1, @T-1)) {
     U: sys.history[@t].request
@@ -42,7 +40,6 @@ DoitAgentMemory[@T, I]: {
       A: sys.history[@t].final_answer
     }
   }
-
   // current turn: within-turn loop (remember/forget are within-turn steps too;
   // the safety gate on run_command is controller logic, not context)
   U: env.user_request[@T]

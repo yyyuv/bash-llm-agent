@@ -12,6 +12,7 @@ DoitAgentChangeDir[@T, I]: {
     SAFETY_INSTRUCTIONS
     CLARIFICATION_INSTRUCTIONS
     MEMORY_INSTRUCTIONS
+    CHANGE_DIR_INSTRUCTIONS                           // change_dir vs cd; same-turn command targets resolved path
     AVAILABLE_TOOLS(run_command, ask_user, answer, remember, forget, change_dir)
   }
   U: {
@@ -42,9 +43,8 @@ DoitAgentChangeDir[@T, I]: {
     }
   }
 
-  // current turn: change_dir is a within-turn step, so it can compose with a
-  // run_command in the same turn (its result carries the "not yet — qualify a
-  // same-turn command" note; the path validation + cd_target write are controller work)
+  // change_dir is a within-turn step; composes with run_command in one turn.
+  // Path validation + cd_target write are controller work (not shown).
   U: env.user_request[@T]
   ForEach(@i: range(1, I)) {
     A: sys.tool_call[@T.i]                            // ... | change_dir

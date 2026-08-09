@@ -12,6 +12,7 @@ DoitAgentMultitask[@T, I]: {
     SAFETY_INSTRUCTIONS
     CLARIFICATION_INSTRUCTIONS
     MEMORY_INSTRUCTIONS
+    CHANGE_DIR_INSTRUCTIONS
     CROSS_SESSION_INSTRUCTIONS                       // local-by-default vs explicit cross-reference
     AVAILABLE_TOOLS(run_command, ask_user, answer, remember, forget, change_dir, read_session)
   }

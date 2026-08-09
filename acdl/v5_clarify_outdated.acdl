@@ -55,10 +55,6 @@ DoitAgentV5Clarify[@T, I]: {
     S: {
         AGENT_INSTRUCTIONS        // role, command style, safety + chit-chat + WHEN-TO-ASK policy
         AVAILABLE_TOOLS           // run_command(command, is_destructive, explanation),
-                                  // ask_user(question, options?), answer(text)
-                                  // NOTE: with the native adapter these schemas travel
-                                  // out-of-band via the API tools= parameter, not as S: prose;
-                                  // shown here to document their content (contrast v3_prompted)
     }
     U: {
         env.cwd[@T]

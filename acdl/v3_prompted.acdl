@@ -21,10 +21,12 @@ DoitAgentPrompted[@T]: {
   }
   U: env.user_request[@T]
 
-  // the model returns raw text; the controller extracts + validates JSON into
-  // sys.tool_call and, on a parse failure, feeds RETRY_CORRECTION back as a U:
-  // message and retries once (llm._extract_json_object / prompted_retry.txt).
-  A: resp.raw_reply[@T]                               // may wrap the JSON in prose / code fences
-  U: RETRY_CORRECTION                                 // only on a parse failure; one retry, then re-parsed
-  // still single-command: the parsed command's result is not fed back (as v1/v2)
+  // raw text is parsed into sys.tool_call. On success it is output, not context;
+  // ONLY on a parse failure do the failed reply + correction re-enter context,
+  // for one retry (llm._call_prompted):
+  If sys.parse_failed {
+    A: resp.raw_reply[@T]             // the failed reply, re-sent
+    U: RETRY_CORRECTION               // "not valid JSON: <error>"
+  }
+  // still single-command: the parsed command's result is not fed back
 }

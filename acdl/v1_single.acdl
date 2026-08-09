@@ -1,15 +1,12 @@
 // doit v1 — single-command agent (Phase 1)
-// One turn, one decision (max_steps = 1). This spec is the CONTEXT we assemble
-// and send: system + env + request. The model's returned tool_call is its
-// output, and in single-command mode its result is printed to the user / logged
-// to disk — never fed back into context — so neither appears here.
-// AVAILABLE_TOOLS travels OUT-OF-BAND via the native API tools= parameter, not
-// as prompt text (the prompted adapter in v3 is what moves it into S: as text).
+// The context we assemble and send: system + env + request. In single-command
+// mode the decision and its result are output, never fed back, so neither
+// appears. Native tools travel out-of-band via the API tools= parameter.
 
 DoitAgentSingleCommand[@T]: {
   S: {
     AGENT_INSTRUCTIONS
-    AVAILABLE_TOOLS(run_command, answer)             // native: passed via API tools=, not prose
+    AVAILABLE_TOOLS(run_command, answer)   // via API tools=
   }
   U: {
     ENV_INFO(env.cwd[@T], env.datetime[@T], env.shell[@T], env.os[@T])
