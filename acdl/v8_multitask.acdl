@@ -13,7 +13,7 @@ DoitAgentMultitask[@T, I]: {
     CLARIFICATION_INSTRUCTIONS
     MEMORY_INSTRUCTIONS
     CHANGE_DIR_INSTRUCTIONS
-    CROSS_SESSION_INSTRUCTIONS                       // local-by-default vs explicit cross-reference
+    CROSS_SESSION_INSTRUCTIONS  // local-by-default vs explicit cross-reference
     AVAILABLE_TOOLS(run_command, ask_user, answer, remember, forget, change_dir, read_session)
   }
   U: {
@@ -25,10 +25,9 @@ DoitAgentMultitask[@T, I]: {
     ForEach(m: sys.memories) { sys.memory_line[m] }
   }
 
-  // OTHER sessions — always injected, one heuristic line each, BEFORE own history
   U: {
-    OTHER_SESSIONS_HEADER
-    ForEach(s: sys.other_sessions) { sys.session_summary[s] }  // "session <id> (<age>, in <cwd>): <recent requests>"
+    OTHER_SESSIONS_HEADER //always injected, one heuristic line each
+    ForEach(s: sys.other_sessions) { sys.session_summary[s] //"session <id> (<age>, in <cwd>): <recent requests>"} 
   }
 
   // THIS session's own replayed history (AFTER other-sessions => implicit "them" binds here)
@@ -52,7 +51,7 @@ DoitAgentMultitask[@T, I]: {
 
   U: {
     USER_SHELL_HISTORY_HEADER
-    ForEach(h: env.recent_user_commands[@T]) { env.shell_cmd[h] }
+    ForEach(h: env.recent_user_commands[@T]){ env.shell_cmd[h] }
   }
 
   // current turn: adds a read_session step (within-turn) to the same loop

@@ -181,7 +181,7 @@ Filesystem     Size   Used  Avail Capacity iused ifree %iused  Mounted on
 \end{lstlisting}
 
 \subsection{ACDL Context Specification: DoitAgentSingleCommand}
-The formal context structure representing the single command-at-a-time execution is detailed in the visual ACDL diagram below:
+The diagram below shows the context we build for a single-command turn: the system prompt, the environment block, and the user request. In single-command mode (\texttt{max\_steps=1}) the model makes one decision and the turn ends. The command's output is printed and logged, but it is never fed back to the model, so the diagram stops at the request.
 
 \begin{figure}[H]
     \centering
@@ -189,6 +189,8 @@ The formal context structure representing the single command-at-a-time execution
     \caption{Visual representation of the ACDL context for DoitAgentSingleCommand.}
     \label{fig:acdl_v1}
 \end{figure}
+
+\lstinputlisting[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true, caption={ACDL source for \texttt{DoitAgentSingleCommand} (\texttt{acdl/v1\_single.acdl}).}, label={lst:acdl_v1}]{../acdl/v1_single.acdl}
 
 % SECTION 3: IDENTIFYING DANGEROUS COMMANDS
 \section{Identifying dangerous commands}
@@ -234,7 +236,7 @@ doit: 'vim' opens an interactive program doit can't wait for. Run it yourself:
 \end{lstlisting}
 
 \subsection{ACDL Context Specification: DoitAgentSafety}
-The formal context structure representing the safety gate integration is detailed in the visual ACDL diagram below:
+The diagram below shows the only safety part the model actually sees: a \texttt{SAFETY\_INSTRUCTIONS} block in the system prompt. The regex guard and the \texttt{Proceed? [y/N]} gate run in Python and send nothing to the model, so they are not drawn. In short, the diagram shows what the model is told about safety, not how we enforce it.
 
 \begin{figure}[H]
     \centering
@@ -242,6 +244,8 @@ The formal context structure representing the safety gate integration is detaile
     \caption{Visual representation of the ACDL context for DoitAgentSafety.}
     \label{fig:acdl_v2}
 \end{figure}
+
+\lstinputlisting[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true, caption={ACDL source for \texttt{DoitAgentSafety} (\texttt{acdl/v2\_safety.acdl}).}, label={lst:acdl_v2}]{../acdl/v2_safety.acdl}
 
 % SECTION 4: MODEL FLEXIBILITY
 \section{Model flexibility}
@@ -311,6 +315,8 @@ For models without native tool-calling, tool schemas move into the system prompt
     \label{fig:acdl_v3}
 \end{figure}
 
+\lstinputlisting[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true, caption={ACDL source for \texttt{DoitAgentPrompted} (\texttt{acdl/v3\_prompted.acdl}).}, label={lst:acdl_v3}]{../acdl/v3_prompted.acdl}
+
 % SECTION 5: MULTI-TURN
 \section{Multi-turn}
 \label{sec:multi_turn}
@@ -366,6 +372,8 @@ The formal context structure representing the conversation history replay integr
     \label{fig:acdl_v4}
 \end{figure}
 
+\lstinputlisting[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true, caption={ACDL source for \texttt{DoitAgentHistory} (\texttt{acdl/v4\_history.acdl}).}, label={lst:acdl_v4}]{../acdl/v4_history.acdl}
+
 % SECTION 6: CLARIFICATIONS
 \section{Clarifications}
 \label{sec:clarifications}
@@ -412,9 +420,11 @@ The final formal context structure for our agent, representing both replayed tur
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.9\textwidth]{acdl_v5.png}
-    \caption{Visual representation of the ACDL context for DoitAgentClarify \& Multi-turn).}
+    \caption{Visual representation of the ACDL context for DoitAgentClarify (clarifications and multi-turn history).}
     \label{fig:acdl_v5}
 \end{figure}
+
+\lstinputlisting[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true, caption={ACDL source for \texttt{DoitAgentClarify} (\texttt{acdl/v5\_clarify.acdl}).}, label={lst:acdl_v5}]{../acdl/v5_clarify.acdl}
 
 % SECTION 7: RICHER INTERACTIONS
 \section{Richer interactions}
@@ -451,7 +461,7 @@ The memory subsystem allows the agent to persist long-term user facts across ter
 \subsection{Implementation Details}
 Memory storage is managed in \texttt{doitlib/state.py} via the flat JSON file \texttt{\textasciitilde/.doit/memories.json} (using the functions \texttt{load\_memories}, \texttt{add\_memory}, and \texttt{forget\_memory}). Unlike session history, this file is global and shared across all sessions. 
 
-During context assembly, the controller invokes \texttt{memory\_block()} in \texttt{doitlib/context.py}, which formats the current memories using the template in \texttt{prompts/memory\_block.txt}. This block lists each stored fact labeled with a stable numeric identifier (e.g., \texttt{m1}, \texttt{m2}) as \texttt{sys.memories} in the LLM's system prompt context. 
+During context assembly, the controller invokes \texttt{memory\_block()} in \texttt{doitlib/context.py}, which formats the current memories using the template in \texttt{prompts/memory\_block.txt}. This block lists each stored fact with a short stable id (e.g., \texttt{m1}, \texttt{m2}) and injects them as \texttt{sys.memories}. This goes in its own \texttt{user} message, not the system prompt: only \texttt{agent\_instructions()} uses the \texttt{system} role, and every other block (memory included) is a \texttt{user} message.
 
 The LPU manipulates these facts via two specialized tools: \texttt{remember(fact)} and \texttt{forget(id)}. Within the controller's turn loop, memory modifications are treated as within-turn steps. When the agent issues a memory tool call, the controller executes the state change in \texttt{\_handle\_memory} and immediately re-enters the execution loop (calling the LPU again) without decrementing the command step limit. This design allows the model to process memory changes and subsequently execute commands in a single user turn.
 
@@ -500,6 +510,24 @@ The context structure representing the persistent memory block injection is deta
     \caption{Visual representation of the ACDL context for memory injection.}
     \label{fig:acdl_v6}
 \end{figure}
+
+\lstinputlisting[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true, caption={ACDL source for \texttt{DoitAgentMemory} (\texttt{acdl/v6\_memory.acdl}).}, label={lst:acdl_v6}]{../acdl/v6_memory.acdl}
+
+% SECTION 8.5: CHANGE_DIR
+\section{Changing directories (\texttt{change\_dir})}
+\label{sec:change_dir}
+Before adding user awareness, we fixed the \texttt{cd} trap (see the wrapper decision in Section~\ref{sec:single_command}). A Python subprocess cannot change its parent shell's directory, so we added a \texttt{change\_dir(path)} tool. It checks that the path exists and writes it to \texttt{\textasciitilde/.doit/cd\_target\_\$DOIT\_SESSION}; the shell wrapper reads that file after \texttt{doit} exits and runs the real \texttt{cd}. Like \texttt{remember}/\texttt{forget}, it is a within-turn step, so ``go there and list it'' can call \texttt{change\_dir} and then \texttt{run\_command} in the same turn.
+
+One catch we found while testing: a \texttt{run\_command} in the same turn still runs in the \emph{old} directory, because the real \texttt{cd} only happens after the process exits. So the model has to point a same-turn command at the resolved path. The path check and the file write are Controller/shell work, so the diagram only shows the one result string the model gets back.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{acdl_v6-5.png}
+    \caption{Visual representation of the ACDL context for DoitAgentChangeDir.}
+    \label{fig:acdl_v6_5}
+\end{figure}
+
+\lstinputlisting[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true, caption={ACDL source for \texttt{DoitAgentChangeDir} (\texttt{acdl/v6\_5\_changedir.acdl}).}, label={lst:acdl_v6_5}]{../acdl/v6_5_changedir.acdl}
 
 % SECTION 9: USER AWARENESS
 \section{User awareness}
@@ -551,6 +579,8 @@ The context structure representing manual user shell history injection is detail
     \caption{Visual representation of the ACDL context for user shell history awareness.}
     \label{fig:acdl_v7}
 \end{figure}
+
+\lstinputlisting[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true, caption={ACDL source for \texttt{DoitAgentUserAware} (\texttt{acdl/v7\_useraware.acdl}).}, label={lst:acdl_v7}]{../acdl/v7_useraware.acdl}
 
 % SECTION 10: OUTPUT AWARENESS
 \section{Output awareness}
@@ -610,7 +640,7 @@ For every turn, the controller compiles a one-line summary block for each siblin
 \begin{decisionbox}{Design Decision: Context Block Ordering for Local Pronoun Resolution}
     \textbf{Problem:} Ensuring that implicit references (e.g. ``sort them'') resolve to the local terminal window rather than another window's files.
     
-    \textbf{Solution:} In \texttt{build\_messages}, we splice the \texttt{other\_sessions\_block} at the top of the prompt, whereas the local session's own replayed history is placed directly above the current user request. Because the local history is closest to the request, implicit references resolve locally by default.
+    \textbf{Solution:} In \texttt{build\_messages} we put the \texttt{other\_sessions\_block} in the ambient setup --- after the memory block, but before this session's own replayed history. The local history sits right above the current request, so because it is the closest context, implicit references resolve locally by default. The full order is: system, environment, memory, other-sessions, local history, shell history, request.
 \end{decisionbox}
 
 \subsection{Example Interaction}
@@ -645,6 +675,8 @@ The context structure representing cross-session summaries and the dynamic retri
     \caption{Visual representation of the ACDL context for multitasking and cross-session handling.}
     \label{fig:acdl_v8}
 \end{figure}
+
+\lstinputlisting[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true, caption={ACDL source for \texttt{DoitAgentMultitask} (\texttt{acdl/v8\_multitask.acdl}).}, label={lst:acdl_v8}]{../acdl/v8_multitask.acdl}
 
 % SECTION 12: FURTHER EXTENSIONS
 \section{Further extensions}
@@ -695,7 +727,7 @@ If 'touch' failed due to a missing utility, the model would receive the stderr a
 \end{lstlisting}
 
 \subsection{ACDL Context Specification: DoitAgentPlans}
-The context structure representing planning, dynamic budget scaling, and the corrective retry path is detailed in the visual ACDL diagram below:
+The diagram below shows how planning reaches the model: a \texttt{PLAN\_INSTRUCTIONS} block, the \texttt{plan} tool in \texttt{AVAILABLE\_TOOLS} (only when \texttt{enable\_plans} is set), and the within-turn loop where the model runs one command at a time. The budget increase and the retry live in the Controller (\texttt{run\_turn}); they change how many loop iterations run but send no message to the model, so they are not drawn. From the model's side, a retry is just a failed command result followed by another command.
 
 \begin{figure}[H]
     \centering
@@ -703,5 +735,58 @@ The context structure representing planning, dynamic budget scaling, and the cor
     \caption{Visual representation of the ACDL context for multi-step planning and self-correcting retry.}
     \label{fig:acdl_v9}
 \end{figure}
+
+\lstinputlisting[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true, caption={ACDL source for \texttt{DoitAgentPlans} (\texttt{acdl/v9\_plans.acdl}).}, label={lst:acdl_v9}]{../acdl/v9_plans.acdl}
+
+\appendix
+
+% APPENDIX A: PROMPTS AND TOOL SCHEMAS
+\section{Prompts and Tool Schemas}
+\label{sec:appendix_prompts}
+This appendix contains the exact prompt templates and tool definitions the code uses. The ACDL source for each figure is shown inline next to that figure (Listings~\ref{lst:acdl_v1}--\ref{lst:acdl_v9}).
+
+\subsection{System Prompt (base)}
+Every turn starts with this single \texttt{system}-role message, returned by \texttt{agent\_instructions()} (\texttt{prompts/system\_prompt.txt}). All the per-feature guidance (safety, clarify, memory, change\_dir, cross-session, plan) lives in this one file --- this is the ``one system message'' our ACDL specs draw as separate \texttt{*\_INSTRUCTIONS} blocks.
+\lstinputlisting[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true]{../prompts/system_prompt.txt}
+
+\subsection{Prompted-Adapter Additions}
+For local models without native tool-calling, the tool schemas (as text) plus this JSON-only wrapper are appended to the system prompt (\texttt{prompts/prompted\_suffix.txt}); the \texttt{\{tools\}} placeholder is filled with the signatures from Section~\ref{sec:tool_schemas}.
+\lstinputlisting[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true]{../prompts/prompted_suffix.txt}
+On a parse failure the model is re-prompted once with the error fed back (\texttt{prompts/prompted\_retry.txt}):
+\lstinputlisting[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true]{../prompts/prompted_retry.txt}
+
+\subsection{Context Block Templates}
+Each context block is rendered from its own template file. The environment block (\texttt{environment\_block.txt}):
+\lstinputlisting[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true]{../prompts/environment_block.txt}
+The persistent-memory block (\texttt{memory\_block.txt}):
+\lstinputlisting[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true]{../prompts/memory_block.txt}
+The manual user shell-history block (\texttt{user\_shell\_history\_block.txt}):
+\lstinputlisting[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true]{../prompts/user_shell_history_block.txt}
+The other-sessions block (\texttt{other\_sessions\_block.txt}):
+\lstinputlisting[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true]{../prompts/other_sessions_block.txt}
+
+\subsection{Tool Schemas}
+\label{sec:tool_schemas}
+The LPU emits exactly one tool call per step. Table~\ref{tab:tools} lists the eight tools and their required arguments (defined in \texttt{doitlib/tools.py}). For the native adapter these travel out-of-band via LiteLLM's \texttt{tools=} parameter; for the prompted adapter they are rendered into the system prompt and the model must reply with a single JSON object of the shape \texttt{\{"tool": "<name>", "args": \{ ... \}\}}.
+
+\begin{table}[H]
+    \centering
+    \caption{The eight tools (the full decision schema).}
+    \begin{tabularx}{\textwidth}{llX}
+        \toprule
+        \textbf{Tool} & \textbf{Required args} & \textbf{Purpose} \\
+        \midrule
+        \texttt{run\_command} & \texttt{command}, \texttt{is\_destructive}, \texttt{explanation} & Translate and run one shell command; the \texttt{is\_destructive} flag is safety layer 1. \\
+        \texttt{answer} & \texttt{text} & Reply in plain text; also the finish signal that ends the turn. \\
+        \texttt{ask\_user} & \texttt{question} (\texttt{options} optional) & Ask one clarifying question, answered within the same turn. \\
+        \texttt{remember} & \texttt{fact} & Store a durable fact/preference about the user. \\
+        \texttt{forget} & \texttt{id} & Delete a stored fact by its \texttt{[id]}. \\
+        \texttt{change\_dir} & \texttt{path} & Change the shell's directory via the wrapper (the \texttt{cd} trap fix). \\
+        \texttt{read\_session} & \texttt{session\_id} & Fetch another terminal session's full history on demand. \\
+        \texttt{plan} & \texttt{steps} & Announce a multi-step plan (offered only when \texttt{enable\_plans} is set). \\
+        \bottomrule
+    \end{tabularx}
+    \label{tab:tools}
+\end{table}
 
 \end{document}
