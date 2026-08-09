@@ -71,7 +71,8 @@
     frame=single,
     rulecolor=\color{border},
     tabsize=2,
-    escapeinside={(*@}{@*)}
+    escapeinside={(*@}{@*)},
+    literate={—}{{---}}1 {–}{{--}}1 {‘}{{`}}1 {’}{{'}}1 {“}{{``}}1 {”}{{''}}1
 }
 
 % Custom TColorBox styles
@@ -235,6 +236,16 @@ doit: 'vim' opens an interactive program doit can't wait for. Run it yourself:
     vim
 \end{lstlisting}
 
+\subsection{Guard Override in Practice}
+The guard is not hypothetical. Across our 15 guard test cases it overrode the model's \texttt{is\_destructive} flag \textbf{6 times} (\texttt{logs/phase2/safety\_guard\_results.json}). A common case is a redirect that writes a file, which the model easily under-flags as read-only:
+
+\begin{lstlisting}[language=bash, caption={A real guard override: the model reported the command as safe; the guard forced a confirmation.}]
+command:              ls > files.txt
+model is_destructive: false    (looks like a read-only listing)
+guard is_destructive: true     (matched the ">" write-redirect pattern)
+result:               Proceed? [y/N] gate shown before anything runs
+\end{lstlisting}
+
 \subsection{ACDL Context Specification: DoitAgentSafety}
 The diagram below shows the only safety part the model actually sees: a \texttt{SAFETY\_INSTRUCTIONS} block in the system prompt. The regex guard and the \texttt{Proceed? [y/N]} gate run in Python and send nothing to the model, so they are not drawn. In short, the diagram shows what the model is told about safety, not how we enforce it.
 
@@ -304,6 +315,45 @@ Sure, here is the command to view disk space:
 ```
 Parser Action: Strip fences, run brace scan -> extracted {"tool": "run_command", ...}
 \end{lstlisting}
+
+\subsection{Case-by-Case Results}
+We ran cases 1--8 (basic) and 56--60 (hard single-command discriminators) from \texttt{tests/cases.md} on all three models in single-command mode (\texttt{enable\_plans=false}), so this is a clean translation test: one command per case, right or wrong. Table~\ref{tab:model_results} grades each turn.
+
+\begin{table}[H]
+    \centering
+    \caption{Per-case results (V = correct command and outcome, $\sim$ = partial, X = wrong / failed / incorrectly refused).}
+    \begin{tabular}{clccc}
+        \toprule
+        \# & Case & \texttt{gpt-4o-mini} & \texttt{qwen3:4b} & \texttt{gemma3:4b} \\
+        \midrule
+        1  & hidden files (\texttt{ls -a})      & V & X        & X \\
+        2  & disk space (\texttt{df -h})        & V & V        & V \\
+        3  & impossible request $\to$ refuse    & V & V        & X \\
+        4  & joke $\to$ refuse                  & V & V        & V \\
+        5  & ``how do I'' $\to$ answer          & V & X        & V \\
+        6  & delete + confirm                   & V & V        & V \\
+        7  & delete + abort                     & V & $\sim$   & V \\
+        8  & redirect self-flag                 & V & V        & V \\
+        56 & 5 largest, recursive, human-size   & V & X        & X \\
+        57 & 3 most common words                & X & V        & X \\
+        58 & non-blank \texttt{.py} lines       & X & X        & X \\
+        59 & files modified $<$ 24h             & V & X        & X \\
+        60 & rename \texttt{.txt} $\to$ \texttt{.md} & $\sim$ & V & X \\
+        \midrule
+        \multicolumn{2}{r}{\textbf{Correct count}} & \textbf{10} & \textbf{7} & \textbf{6} \\
+        \bottomrule
+    \end{tabular}
+    \label{tab:model_results}
+\end{table}
+
+The ranking is \texttt{gpt-4o-mini} (10/13) $>$ \texttt{qwen3:4b} (7/13) $>$ \texttt{gemma3:4b} (6/13). Case 58 (count non-blank lines across nested \texttt{.py} files) is a good discriminator --- all three failed it. The clearest local-vs-local split is case 57 (3 most common words): \texttt{qwen3} produced the correct pipeline (\texttt{the}=4, \texttt{apple}=3, \texttt{fox}=2), while \texttt{gemma3} mis-flagged the read-only pipeline as destructive and aborted. On case 59 both local models emitted GNU-only \texttt{ls} flags (\texttt{--time-style}, \texttt{--block-size}) that fail on BSD/macOS, whereas \texttt{gpt-4o-mini} used a portable \texttt{find -mtime -1}.
+
+\subsubsection{Logged Reliability Numbers}
+\begin{itemize}
+    \item The deterministic regex guard overrode the model's own \texttt{is\_destructive} flag in \textbf{6 of 15} guard test cases (\texttt{logs/phase2/safety\_guard\_results.json}); the same set also hard-blocked 1 \texttt{sudo} and 4 interactive commands.
+    \item The prompted-adapter JSON parser passed \textbf{10/10} offline cases (\texttt{logs/phase3/prompted\_adapter\_results.json}), covering fenced JSON, JSON-in-prose, braces-inside-strings, hallucinated-tool rejection, and the retry path.
+    \item Live, \texttt{qwen3} (native) produced \textbf{no} JSON/tool-call failures across all 13 cases; \texttt{gemma3} (prompted) hit one malformed reply it recovered from and one hard failure after two retries.
+\end{itemize}
 
 \subsection{ACDL Context Specification: DoitAgentPrompted}
 For models without native tool-calling, tool schemas move into the system prompt prose, and the raw text reply is parsed. The visual ACDL diagram below shows how we handle JSON validation and retries:
@@ -646,24 +696,37 @@ For every turn, the controller compiles a one-line summary block for each siblin
 \subsection{Example Interaction}
 Below is a two-terminal interaction showing implicit local routing and explicit cross-session copying:
 
-\begin{lstlisting}[language=bash, caption={Implicit local resolution vs. explicit cross-session copy.}]
-Terminal 1:
-$ doit "move to my llm class folder"
-$ doit "list the files"
-alpha.txt beta.txt gamma.txt
+\begin{lstlisting}[language=bash, caption={Two real terminals (sessions p8win1 / p8win2): implicit reference stays local, explicit reference reaches across. From logs/phase8/live\_two\_window\_gpt4omini.txt.}]
+# Window 1 (DOIT_SESSION=p8win1), dir seeded with alpha/beta/gamma
+$ doit "list the files here"
+$ ls
+alpha.txt
+beta.txt
+gamma.txt
 
-Terminal 2:
-$ doit "move to my documents folder"
-$ doit "create a folder for each year from 2020 to 2026"
-Folders created.
+# Window 2 (DOIT_SESSION=p8win2) -- acts MORE RECENTLY than window 1
+$ doit "make a directory for every year from 2020 through 2026 in one command"
+[WARNING] This command modifies the filesystem:
+    mkdir {2020..2026}
+Proceed? [y/N] y
+$ mkdir {2020..2026}
 
-Terminal 1:
-$ doit "sort them by date"
-$ ls -t
-[Implicit reference resolves locally to Terminal 1's files (alpha/beta/gamma)]
+# Window 1 again -- IMPLICIT reference must stay local
+$ doit "now sort them by date"
+$ ls -lt
+-rw-r--r--  gamma.txt
+-rw-r--r--  beta.txt
+-rw-r--r--  alpha.txt
+# PASS: "them" resolved to window 1's OWN files, not window 2's year folders
 
-$ doit "now do the same folder task we did in window 2 here"
-[Agent calls read_session("Terminal_2"), fetches history, and runs mkdir {2020..2026}]
+# Window 1, fresh empty dir -- EXPLICIT cross-reference must reach across
+$ doit "redo here the exact same folder task I did in the other terminal window"
+- read session p8win2                <- read_session fired on the OTHER window
+[WARNING] This command modifies the filesystem:
+    mkdir {2020..2026}
+Proceed? [y/N] y
+$ mkdir {2020..2026}
+# PASS: read_session("p8win2") fetched window 2's history; the model reproduced its mkdir
 \end{lstlisting}
 
 \subsection{ACDL Context Specification: DoitAgentMultitask}
@@ -712,18 +775,31 @@ If any command returns a non-zero exit code, the controller triggers a self-corr
 \subsection{Example Interaction}
 Below is a live session executing a multi-step plan with a corrective retry:
 
-\begin{lstlisting}[language=bash, caption={Multi-step plan execution with self-correcting retry.}]
-$ doit "create a folder named log_reports, move inside, and touch config.txt"
+\begin{lstlisting}[language=bash, caption={A real multi-step plan: the find output feeds gzip, it is not guessed. Paths abbreviated to <sandbox>. From logs/phase9/live\_plan\_chain\_gpt4omini.txt.}]
+$ doit "find the 3 largest .log files anywhere under <sandbox> and gzip them"
 Plan:
-  1. Create a directory named log_reports.
-  2. Change directory to log_reports.
-  3. Create a file named config.txt.
+  1. find the 3 largest .log files under the specified directory
+  2. gzip each of the found log files
+$ find <sandbox> -name '*.log' -type f -exec du -h {} + | sort -hr | head -n 3
+781M  <sandbox>/logs/huge_run3.log
+ 49M  <sandbox>/logs/access.log
+500K  <sandbox>/logs/app.log
+[WARNING] This command modifies the filesystem:
+    gzip <sandbox>/logs/huge_run3.log <sandbox>/logs/access.log <sandbox>/logs/app.log
+Proceed? [y/N] y
+$ gzip <sandbox>/logs/huge_run3.log <sandbox>/logs/access.log <sandbox>/logs/app.log
+The 3 largest .log files have been successfully gzipped.
+\end{lstlisting}
 
-$ mkdir log_reports
-$ change_dir log_reports
-$ touch config.txt
-[Self-Correction example]:
-If 'touch' failed due to a missing utility, the model would receive the stderr and automatically attempt a correction (e.g. echo > config.txt) in a single turn.
+The self-correcting retry is a separate, always-on mechanism. Below, a real \texttt{stat} call using the GNU \texttt{--format} flag fails on macOS/BSD; the model reads the stderr and fixes it with the BSD \texttt{-f} flag on its one granted retry:
+
+\begin{lstlisting}[language=bash, caption={A real self-correcting retry: a BSD/GNU stat mismatch, fixed on the granted retry. From logs/phase9/live\_retry\_stat\_gpt4omini.txt.}]
+$ stat --format='%y' <sandbox>/logs/app.log.gz
+stat: illegal option -- -
+usage: stat [-FLnq] [-f format | -l | -r | -s | -x] [-t timefmt] [file ...]
+doit: command exited with code 1
+$ stat -f '%m' <sandbox>/logs/app.log.gz     <- retried with the BSD flag
+1783581246
 \end{lstlisting}
 
 \subsection{ACDL Context Specification: DoitAgentPlans}
@@ -745,17 +821,155 @@ The diagram below shows how planning reaches the model: a \texttt{PLAN\_INSTRUCT
 \label{sec:appendix_prompts}
 This appendix contains the exact prompt templates and tool definitions the code uses. The ACDL source for each figure is shown inline next to that figure (Listings~\ref{lst:acdl_v1}--\ref{lst:acdl_v9}).
 
-\subsection{System Prompt (base)}
-Every turn starts with this single \texttt{system}-role message, returned by \texttt{agent\_instructions()} (\texttt{prompts/system\_prompt.txt}). All the per-feature guidance (safety, clarify, memory, change\_dir, cross-session, plan) lives in this one file --- this is the ``one system message'' our ACDL specs draw as separate \texttt{*\_INSTRUCTIONS} blocks.
-\lstinputlisting[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true]{../prompts/system_prompt.txt}
+\subsection{System Prompt: Base and Per-Version Deltas}
+\label{sec:prompt_deltas}
+The system prompt is \emph{cumulative} --- one file (\texttt{prompts/system\_prompt.txt}) that each phase extends. Below is the \emph{real} base from the phase~0--1 commit, then the main text each later phase appended (identified from git history; long paragraphs are trimmed with \texttt{...} for space). So ``the prompt at version $N$'' is the base plus every delta through $N$. Version~3 (the prompted adapter) is the exception: it does not edit this file but appends tool text and a JSON wrapper at call time, shown in its entry below. The complete, untrimmed final prompt is in Section~\ref{sec:full_system_prompt}.
 
-\subsection{Prompted-Adapter Additions}
-For local models without native tool-calling, the tool schemas (as text) plus this JSON-only wrapper are appended to the system prompt (\texttt{prompts/prompted\_suffix.txt}); the \texttt{\{tools\}} placeholder is filled with the signatures from Section~\ref{sec:tool_schemas}.
+\paragraph{v1 --- base (phase 0--1).}
+\begin{lstlisting}[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true]
+You are doit, a command-line agent that turns plain-English requests into
+shell commands and runs them for the user.
+
+You never execute anything yourself. On every turn reply with exactly one
+tool call:
+
+- run_command: when the request translates to a shell command. Set
+  is_destructive=true if the command could modify or delete anything
+  (files, permissions, git state, installed software, redirects that
+  write); set it false only for purely read-only commands. Always include
+  a one-sentence explanation of what the command does.
+- answer: when nothing should run. Use it to answer "how do I ...?"
+  questions about shells and commands, to explain why a request is
+  impossible, and to close off-topic requests.
+
+If the request describes a concrete action to take on this machine (create,
+write, edit, move, delete, install, show, list, find, ...), always use
+run_command to actually do it — do not describe the command instead of
+running it. Only use answer when the user asked a question, the action is
+impossible, or the request is off-topic.
+
+Rules:
+- Write commands that fit the user's shell and OS (see the environment
+  block); prefer portable syntax.
+- Never use sudo.
+- Never run interactive or full-screen programs (vim, nano, top, less,
+  ssh without a command). Use answer to tell the user what they can run
+  themselves instead. ("edit"/"change"/"update" a file means a
+  non-interactive command, not opening an editor.)
+- If the request is not about the shell, files, or this machine (for
+  example "tell me a joke"), reply with answer: a short, friendly
+  message saying you are a shell command agent and cannot help with that.
+- Keep answers short and factual.
+\end{lstlisting}
+
+\paragraph{v2 Safety.} The \texttt{run\_command} bullet's tail is extended (the ``never sudo / never interactive'' rules were already in the base):
+\begin{lstlisting}[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true]
+  ... a one-sentence explanation of what the command does. A destructive
+  command is always shown to the user with your explanation and requires
+  their explicit "y" before it runs — so write the real command the
+  request calls for; do not water it down or refuse out of caution.
+\end{lstlisting}
+
+\paragraph{v3 Prompted adapter.} This version does not change \texttt{system\_prompt.txt}. Instead, for models without native tool-calling, the adapter appends the tool schemas (as text) and a JSON-only wrapper to the system prompt at call time (\texttt{prompts/prompted\_suffix.txt}; the \texttt{\{tools\}} placeholder is filled with the tool signatures from Section~\ref{sec:tool_schemas}):
 \lstinputlisting[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true]{../prompts/prompted_suffix.txt}
 On a parse failure the model is re-prompted once with the error fed back (\texttt{prompts/prompted\_retry.txt}):
 \lstinputlisting[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true]{../prompts/prompted_retry.txt}
 
+\paragraph{v4 Multi-turn.} Adds the refinement paragraph and an ls-sort rule:
+\begin{lstlisting}[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true]
+Earlier turns of this conversation may be shown to you as context. When a
+new request refines or changes a previous one ("now sort them by date",
+"in ascending order", "by creation time instead"), build the command from
+the request's actual meaning — do NOT copy the previous command unchanged.
+...
+
+- To sort a file listing, prefer ls's own flags over piping to sort:
+  `ls -t` (newest first), `ls -tr` (oldest first), `ls -S` (largest
+  first), `ls -r` (reverse). Do not sort `ls -l` with `sort -k N`.
+  macOS/BSD `ls` has no portable creation-time sort.
+\end{lstlisting}
+
+\paragraph{v5 Clarifications.} Adds the \texttt{ask\_user} bullet and the non-annoyance policy:
+\begin{lstlisting}[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true]
+- ask_user: when you genuinely cannot proceed safely without knowing what
+  the user meant. Ask at most one short question (offer options when the
+  choices are known). Their reply comes back and you continue in the same
+  turn.
+
+When to ask vs. assume — do NOT be annoying. Ask ONLY when (a) a wrong
+guess would run a destructive command on the wrong files, or (b) the
+reasonable interpretations lead to materially different results and none
+is clearly the common one. Otherwise pick the most common interpretation,
+act, and STATE your assumption in the answer.
+\end{lstlisting}
+
+\paragraph{v6 Memory.} Adds the \texttt{remember}/\texttt{forget} bullets, the ``question overrides action verb'' exception, and the known-facts paragraph:
+\begin{lstlisting}[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true]
+- remember: when the user states a durable fact or preference about
+  themselves or their setup. This does NOT end the turn — you can remember
+  AND then run a command. Do NOT store transient details.
+- forget: to delete a stored fact by its [id]. To CHANGE a fact, call
+  forget on the old id and then remember the new version.
+... EXCEPTION: a request literally phrased as a question ("how do I
+find...") is always answer, not run_command — the question wording
+overrides the action verb ...
+
+Known facts about the user may be shown to you in a "persistent memory"
+block, each tagged with an [id]. Use them to interpret requests ... If a
+single request both states a fact and needs a command, call remember FIRST.
+\end{lstlisting}
+
+\paragraph{v6.5 change\_dir.} Adds the \texttt{change\_dir} bullet, incl.\ the same-turn warning:
+\begin{lstlisting}[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true]
+- change_dir: when the request is to go to / cd into a directory. Use
+  change_dir, NEVER `cd` via run_command. This does NOT end the turn.
+  IMPORTANT: the real cd only takes effect after doit exits — you are NOT
+  yet in the new directory when a following run_command in the SAME turn
+  executes. That command must target the new directory explicitly
+  (e.g. `ls /the/resolved/path`), not a bare `ls`.
+\end{lstlisting}
+
+\paragraph{v7 User awareness.} Adds the manual-shell-history paragraph:
+\begin{lstlisting}[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true]
+You may also see a "Commands the USER ran manually in this terminal" block.
+These are real shell commands the user typed themselves, outside of doit.
+Use it to answer questions about what the user just did ("summarize what I
+just did", "why did my last command fail") by reading those commands and
+their directories directly; do not re-run them unless asked.
+\end{lstlisting}
+
+\paragraph{v8 Multi-tasking.} Adds the \texttt{read\_session} bullet and the local-by-default rule:
+\begin{lstlisting}[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true]
+- read_session: to fetch another terminal window's full history by its
+  [id]. Use ONLY when the user explicitly refers to work in a different
+  window. Never for this session's own recent activity.
+
+You may also see an "Other recent terminal sessions" block. Default to THIS
+session: an implicit reference — "them", "these", "that" — always means
+this terminal's own recent activity, NEVER another window's, even if
+another window did something more recently.
+\end{lstlisting}
+
+\paragraph{v9 Plans.} Adds the \texttt{plan} bullet and the recovery-stop rule:
+\begin{lstlisting}[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true]
+- plan: ONLY when a request genuinely needs more than one command. Call
+  plan with short step descriptions FIRST, then carry it out one
+  run_command at a time, looking at each command's real output before
+  deciding the next. Do NOT guess values a later step needs. When a step
+  applies the SAME action to several items, do it in ONE command.
+
+Recovery, not blind persistence: if a step finds nothing, or fails in a way
+that makes the remaining steps pointless, STOP and use answer to report
+that honestly. Do not silently declare partial success.
+\end{lstlisting}
+
+\subsection{Full System Prompt (final, v9)}
+\label{sec:full_system_prompt}
+The complete cumulative prompt (one \texttt{system}-role message, from \texttt{agent\_instructions()}). All per-feature guidance lives in this one file --- this is the ``one system message'' our ACDL specs draw as separate \texttt{*\_INSTRUCTIONS} blocks.
+\lstinputlisting[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true]{../prompts/system_prompt.txt}
+
 \subsection{Context Block Templates}
+\label{sec:context_templates}
 Each context block is rendered from its own template file. The environment block (\texttt{environment\_block.txt}):
 \lstinputlisting[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true]{../prompts/environment_block.txt}
 The persistent-memory block (\texttt{memory\_block.txt}):
