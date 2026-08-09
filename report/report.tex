@@ -1003,4 +1003,8 @@ The LPU emits exactly one tool call per step. Table~\ref{tab:tools} lists the ei
     \label{tab:tools}
 \end{table}
 
+The complete tool definitions --- \texttt{TOOL\_SCHEMAS} in \texttt{doitlib/tools.py}, including every argument's type, description, and required-fields list --- are listed below. This is exactly what the native adapter passes via \texttt{tools=}, and what the prompted adapter renders into the system prompt.
+
+\lstinputlisting[language=Python, firstline=36, lastline=282, numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true, caption={The complete tool schemas (\texttt{doitlib/tools.py}, \texttt{TOOL\_SCHEMAS}).}, label={lst:tool_schemas_full}]{../doitlib/tools.py}
+
 \end{document}
