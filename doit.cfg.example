@@ -1,0 +1,33 @@
+# Example doit configuration.
+# Copy this file to your home directory as ~/doit.cfg and edit as needed:
+#
+#     cp doit.cfg.example ~/doit.cfg
+#
+# Every setting has a working default, so doit also runs with no config
+# file at all. The values below are the defaults used for the report's
+# primary model (openai/gpt-4o-mini).
+
+[doit]
+# Any LiteLLM model string. Examples:
+#   openai/gpt-4o-mini          (API model, needs OPENAI_API_KEY)
+#   ollama/qwen3:4b-instruct    (local, tool-calling  -> adapter = native)
+#   ollama/gemma3:4b            (local, no tool-calling -> adapter = prompted)
+model = openai/gpt-4o-mini
+
+# How the model is driven:
+#   native   = LiteLLM tool-calling API (gpt-4o-mini, qwen3:4b-instruct)
+#   prompted = tool schemas rendered into the system prompt + JSON reply
+#              (for models without tool-calling, e.g. gemma3:4b)
+adapter = native
+
+temperature = 0.0
+
+# 1 = single-command mode (one command per turn). The plan() tool can
+# raise this per-turn when enable_plans is true.
+max_steps = 1
+
+command_timeout_seconds = 60
+
+# Capability gate for the plan() tool. Leave true for a capable model
+# (gpt-4o-mini); set false for the ~4B locals (qwen3:4b, gemma3:4b).
+enable_plans = true
