@@ -39,7 +39,11 @@ Companion to REPORT_REVIEW.md. Check off as you go.
 
 **All done.** C1–C11 ✅ (evidence on disk; the real ones are now spliced into §2/§4/§11/§12 — see G2). Remaining "paste into section X" notes are absorbed into the prose still owed for those sections.
 
-*(Ready-made before/after pairs for the Conclusion / F7, still on disk: phase5 history-bleed↔fixed; phase6_5 wrong-dir↔retest; phase9 budget-exhaustion↔plan-chain; phase6 wrong-forget↔retarget.)*
+**What-worked/didn't bug-fix cases now IN the report (2026-08-10, real data from `report/*.md`):**
+- **§Richer interactions** — added "What Worked and What Didn't: the Repeated-Question Bug" (the history-bleed bug): buggy 3-turn transcript → failed separate-paragraph fix → root cause (two rules conflicting by proximity/specificity) → the in-rule fix that worked → lesson. Source: `report/history_bleed_bug.md`, logs/phase5/.
+- **§Output awareness** — added the stronger follow-up-command example (runs `file …` instead of guessing) + two honest behavioral limitations (non-deterministic single-command batching; facts ≠ good delete verdict). Source: `report/output_awareness_followup*.md`, logs/phase9/.
+
+*(Still on disk, NOT yet written into a section — candidates for the Conclusion/F7 or their own sections: phase6_5 wrong-dir↔retest; phase9 budget-exhaustion↔plan-chain (P9e); phase6 wrong-forget↔retarget. `report/model_comparison_data.md` D2/D4/D5 is explicitly marked "write prose yourself" — left for Yuval.)*
 
 ## D. Model comparison
 

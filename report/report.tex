@@ -661,6 +661,26 @@ $ find . -name "*.py" -mtime -7 -ls
   14283    8 -rw-r--r--   1 yuval  staff  1319 Jul  7 15:00 ./train.py
 \end{lstlisting}
 
+\subsection{What Worked and What Didn't: the Repeated-Question Bug}
+An earlier version had a subtle bug: a past turn changed how a later, identically-worded turn was handled. Turn~1 (a literal question) was correctly answered; turn~2 (a modification) correctly ran a command; but turn~3 --- word-for-word the same as turn~1 --- ran the command instead of answering.
+
+\begin{lstlisting}[language=bash, caption={The bug: an identical question runs the second time, because a command turn came in between (logs/phase5/live\_richer\_interactions\_history\_bleed.txt).}]
+$ doit "how do i find python files modified this week?"
+You can find Python files ... find . -name "*.py" -mtime -7   <- turn 1: answered (correct)
+$ doit "modify it to also show file sizes"
+$ find . -name "*.py" -mtime -7 -exec ls -lh {} \;           <- turn 2: ran (correct)
+$ doit "how do i find python files modified this week?"
+$ find . -name "*.py" -mtime -7 -exec ls -lh {} \;           <- turn 3: RAN, should have answered
+\end{lstlisting}
+
+\textbf{The fix that did not work.} We first added a new, separate rule to the system prompt: a request phrased as a question always gets \texttt{answer}. It made no difference --- turn~3 still ran the command.
+
+\textbf{Why.} The prompt already had an action-verb rule, placed earlier, that listed \texttt{find} by name (``if the request describes a concrete action --- create, \dots, find, \dots --- run it''). Our new exception sat in its own paragraph further down. The two rules never met on the page, so faced with ``how do i \emph{find} \dots'' the model matched the concrete word \texttt{find} in the earlier, more specific rule and ran the command. A general exception in a distant paragraph could not override a specific keyword match.
+
+\textbf{The fix that worked.} We moved the exception \emph{inside} the action-verb rule, at the exact point of conflict: ``\dots run it. EXCEPTION: a request literally phrased as a question is always \texttt{answer} --- the question wording overrides the action verb.'' Turn~3 then answered correctly.
+
+\textbf{Lesson.} Prompt rules conflict by proximity and specificity, not just by being present: a general exception must live \emph{inside} the specific rule it is meant to override, not in a separate paragraph. The same lesson recurred in Section~\ref{sec:change_dir}, where a same-turn warning only changed the model's behavior once it was moved into the tool-result text at the point of decision.
+
 \subsection{Limitations}
 We observed that smaller local models (such as \texttt{gemma3:4b}) frequently fail on the third turn (``execute it''), responding with ``Execute what?'' or hallucinating unrelated commands. This indicates that tracking command references across multiple conversational turns is a capability limited to larger, instruction-tuned models.
 
@@ -832,8 +852,31 @@ $ doit "which of these is larger?"
 report.txt is the larger file, with a size of 30K compared to notes.txt's 12K.
 \end{lstlisting}
 
+A stronger case is a question the agent \emph{cannot} answer from what it already sees, so it runs a new command to find out first. In a neutral sandbox of files with uninformative names:
+
+\begin{lstlisting}[language=bash, caption={Answering via a follow-up command, not a guess (\texttt{openai/gpt-4o-mini}; logs/phase9/live\_output\_awareness\_followup\_gpt4omini.txt).}]
+$ doit "list the files here"
+$ ls
+backup.tmp  cache.bin  core  data  notes  output
+
+$ doit "which of these files look safe to delete? check their types and sizes if you're unsure"
+$ file backup.tmp cache.bin core data notes output    <- ran a follow-up command, did not answer blind
+backup.tmp: data
+cache.bin:  data
+core:       ASCII text
+data:       ASCII text
+notes:      ASCII text
+output:     ASCII text
+
+$ doit "so based on that, which are safe to delete?"
+Based on the file types and sizes: backup.tmp and cache.bin are data files ...
+core, data, notes, and output are ASCII text files ...
+\end{lstlisting}
+
 \subsection{Limitations}
 Truncation is head-and-tail, so the \emph{middle} of a long output is discarded: a warning buried 2{,}000 lines into a 5{,}000-line log is invisible to a follow-up question. More importantly, replayed command output is user-controlled text spliced directly into the prompt, which is a prompt-injection surface --- a file whose contents read like instructions is fed to the model as context. The deterministic safety guard (which inspects the \emph{command}, not the model's rationale) is our backstop, but the injection risk is real and not fully mitigated.
+
+Two behavioral weaknesses also surfaced in the ``which are safe to delete?'' runs above. First, in single-command mode whether the agent inspects all files in one command or one file per turn is non-deterministic; in one run it checked files one at a time, lost track of its own progress (``No, I have not checked all files yet''), and only batched after an explicit ``do them all at once''. Second, gathering the right facts does not guarantee the right conclusion: the delete verdict varied between runs and reasoned only from file type and byte size, ignoring obvious name cues --- \texttt{backup.tmp} and \texttt{cache.bin} are the disposable files, yet the agent repeatedly proposed \emph{keeping} them.
 
 % SECTION 11: MULTI-TASKING
 \section{Multi-tasking}
