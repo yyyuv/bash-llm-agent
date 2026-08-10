@@ -20,7 +20,7 @@ What specific items do you want to clean up? (e.g., temporary files, old project
   3. all files
 Your answer (number or text):
 ⚠ This command modifies the filesystem:
-    rm -rf ~/Documents/Claude/Projects/assingment3/bash-llm-agent/tmp/*
+    rm -rf ~/Documents/Studies/Projects/assingment3/bash-llm-agent/tmp/*
   This command removes all files in the temporary directory, assuming you want to clean up temporary files.
 Proceed? [y/N] n
 Aborted. (Nothing was executed.)

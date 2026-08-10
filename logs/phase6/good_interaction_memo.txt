@@ -79,9 +79,9 @@ yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % cat ~/.doit/memories.json
 ]%                                                                                                                                                                                            
 yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "where am i now?"
 $ pwd
-/Users/yuvalreuveni/Documents/Claude/Projects/assingment3/bash-llm-agent
+/Users/yuvalreuveni/Documents/Studies/Projects/assingment3/bash-llm-agent
 yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "go to my favourite folder"
-$ cd /Users/yuvalreuveni/Documents/Claude/Projects/assingment3/bash-llm-agent/logs
+$ cd /Users/yuvalreuveni/Documents/Studies/Projects/assingment3/bash-llm-agent/logs
 yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % cat ~/.doit/memories.json       
 [
   {
@@ -103,7 +103,7 @@ dquote>
 yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "my favourite folder was changed to /prompts"
 · forgot m2
 · remembered [m2]: the user's favourite folder is /prompts
-$ cd /Users/yuvalreuveni/Documents/Claude/Projects/assingment3/bash-llm-agent/prompts
+$ cd /Users/yuvalreuveni/Documents/Studies/Projects/assingment3/bash-llm-agent/prompts
 yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % cat ~/.doit/memories.json                         
 [
   {

@@ -13,7 +13,7 @@ single-command budget; DECISIONS P6c: remember first, then act).
 
 yuvalreuveni@yuvals-MacBook-Pro bash-llm-agent % doit "cd into the doitlib folder — and by the way, this whole project is my university LLM course assignment"
 
-· will cd to /Users/yuvalreuveni/Documents/Claude/Projects/assingment3/bash-llm-agent/doitlib after this run
+· will cd to /Users/yuvalreuveni/Documents/Studies/Projects/assingment3/bash-llm-agent/doitlib after this run
 · remembered [m4]: this whole project is my university LLM course assignment
 I've changed the directory to the doitlib folder for you. This project is noted as your university LLM course assignment.
 
@@ -23,7 +23,7 @@ yuvalreuveni@yuvals-MacBook-Pro doitlib %          <- shell really moved (prompt
 (~/.doit/sessions/c6dual.jsonl)
 
 request: cd into the doitlib folder — and by the way, this whole project is my university LLM course assignment
-cwd:     /Users/yuvalreuveni/Documents/Claude/Projects/assingment3/bash-llm-agent
+cwd:     /Users/yuvalreuveni/Documents/Studies/Projects/assingment3/bash-llm-agent
   tool=change_dir  args={"path": "doitlib"}
   tool=remember    args={"fact": "this whole project is my university LLM course assignment"}
 final_answer: I've changed the directory to the doitlib folder for you. This project is noted as your university LLM course assignment.

@@ -14,7 +14,7 @@ export PATH="$HOME/.local/bin:$PATH"
 Broken (after a manual edit, before this fix):
 ```bash
 # doit (Assignment 3) entry point lives here
-export PATH="$/Users/yuvalreuveni/Documents/Claude/Projects/assingment3/bash-llm-agent/doit$HOME/.local/bin:$PATH"
+export PATH="$/Users/yuvalreuveni/Documents/Studies/Projects/assingment3/bash-llm-agent/doit$HOME/.local/bin:$PATH"
 ```
 
 Symptom: `doit "tell me a joke"` → `zsh: command not found: doit`, same
