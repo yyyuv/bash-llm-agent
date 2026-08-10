@@ -2,7 +2,7 @@ Phase 7 — user shell-history awareness — live transcript, cases 45–47
 Model: openai/gpt-4o-mini (native adapter)
 Date: 2026-07-08
 
-These three cases were driven from a non-interactive shell (Claude's tool
+These three cases were driven from a non-interactive shell (Studies's tool
 sandbox), which cannot run the real precmd/PROMPT_COMMAND hook (it only
 fires across an interactive shell's prompt cycle, not one-off tool calls).
 Case 44 (logs/phase7/live_summarize_gpt4omini.txt) already proved the real

@@ -29,7 +29,7 @@ $ ls -S
 PLAN_DETAILED.md
 DECISIONS.md
 PLAN.md
-CLAUDE.md
+notes.txt
 doit
 doitlib
 logs

@@ -61,7 +61,7 @@ After `source ~/.zshrc`:
   $ doit "go to logs/ folder"
   · will cd to /Users/.../bash-llm-agent/logs after this run
   $ ls
-  acdl  CLAUDE.md  DECISIONS.md  doit  doitlib  logs  PLAN_DETAILED.md
+  acdl  notes.txt  DECISIONS.md  doit  doitlib  logs  PLAN_DETAILED.md
   PLAN.md  prompts  sessions  shell  tests
   yuvalreuveni@yuvals-MacBook-Pro logs %
 Result: PASS on the core mechanism -- the zsh PROMPT ITSELF changed from

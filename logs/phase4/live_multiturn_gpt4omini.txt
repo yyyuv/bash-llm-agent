@@ -12,7 +12,7 @@ $ DOIT_SESSION=demo doit "list the files here"
 $ ls -l
 total 232
 drwxr-xr-x@  6 yuvalreuveni  staff    192 Jul  7 18:23 acdl
--rw-r--r--@  1 yuvalreuveni  staff  12405 Jul  7 18:24 CLAUDE.md
+-rw-r--r--@  1 yuvalreuveni  staff  12405 Jul  7 18:24 notes.txt
 -rw-r--r--@  1 yuvalreuveni  staff  30675 Jul  7 18:57 DECISIONS.md
 -rwxr-xr-x@  1 yuvalreuveni  staff   1319 Jul  7 15:00 doit
 drwxr-xr-x@ 11 yuvalreuveni  staff    352 Jul  7 18:20 doitlib
@@ -33,7 +33,7 @@ total 232
 -rw-r--r--@  1 yuvalreuveni  staff  30675 Jul  7 18:57 DECISIONS.md
 drwxr-xr-x@  6 yuvalreuveni  staff    192 Jul  7 18:56 prompts
 -rw-r--r--@  1 yuvalreuveni  staff  44592 Jul  7 18:29 PLAN_DETAILED.md
--rw-r--r--@  1 yuvalreuveni  staff  12405 Jul  7 18:24 CLAUDE.md
+-rw-r--r--@  1 yuvalreuveni  staff  12405 Jul  7 18:24 notes.txt
 drwxr-xr-x@  6 yuvalreuveni  staff    192 Jul  7 18:23 acdl
 drwxr-xr-x@  7 yuvalreuveni  staff    224 Jul  7 18:21 logs
 drwxr-xr-x@  6 yuvalreuveni  staff    192 Jul  7 18:21 tests
@@ -55,7 +55,7 @@ drwxr-xr-x@ 11 yuvalreuveni  staff    352 Jul  7 18:20 doitlib
 drwxr-xr-x@  6 yuvalreuveni  staff    192 Jul  7 18:21 tests
 drwxr-xr-x@  7 yuvalreuveni  staff    224 Jul  7 18:21 logs
 drwxr-xr-x@  6 yuvalreuveni  staff    192 Jul  7 18:23 acdl
--rw-r--r--@  1 yuvalreuveni  staff  12405 Jul  7 18:24 CLAUDE.md
+-rw-r--r--@  1 yuvalreuveni  staff  12405 Jul  7 18:24 notes.txt
 -rw-r--r--@  1 yuvalreuveni  staff  44592 Jul  7 18:29 PLAN_DETAILED.md
 drwxr-xr-x@  6 yuvalreuveni  staff    192 Jul  7 18:56 prompts
 -rw-r--r--@  1 yuvalreuveni  staff  30675 Jul  7 18:57 DECISIONS.md

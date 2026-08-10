@@ -12,7 +12,7 @@ $ ls -S
 PLAN_DETAILED.md
 DECISIONS.md
 PLAN.md
-CLAUDE.md
+notes.txt
 doit
 doitlib
 logs
@@ -28,7 +28,7 @@ total 264
 -rw-r--r--@  1 yuvalreuveni  staff  45198 Jul  8 14:52 PLAN_DETAILED.md
 -rw-r--r--@  1 yuvalreuveni  staff  40784 Jul  8 14:52 DECISIONS.md
 -rw-r--r--@  1 yuvalreuveni  staff  17995 Jul  7 18:15 PLAN.md
--rw-r--r--@  1 yuvalreuveni  staff  16830 Jul  8 13:39 CLAUDE.md
+-rw-r--r--@  1 yuvalreuveni  staff  16830 Jul  8 13:39 notes.txt
 -rwxr-xr-x@  1 yuvalreuveni  staff   1319 Jul  7 15:00 doit
 drwxr-xr-x@ 11 yuvalreuveni  staff    352 Jul  8 14:50 doitlib
 drwxr-xr-x@  9 yuvalreuveni  staff    288 Jul  8 13:37 logs
