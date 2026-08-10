@@ -503,7 +503,7 @@ We ran cases 1--8 (basic) and 56--60 (hard single-command discriminators) from \
     \label{tab:model_results}
 \end{table}
 
-The ranking is \texttt{gpt-4o-mini} (10/13) $>$ \texttt{qwen3:4b} (7/13) $>$ \texttt{gemma3:4b} (6/13). Case 58 (count non-blank lines across nested \texttt{.py} files) is a good discriminator --- all three failed it. The clearest local-vs-local split is case 57 (3 most common words): \texttt{qwen3} produced the correct pipeline (\texttt{the}=4, \texttt{apple}=3, \texttt{fox}=2), while \texttt{gemma3} mis-flagged the read-only pipeline as destructive and aborted. On case 59 both local models emitted GNU-only \texttt{ls} flags (\texttt{--time-style}, \texttt{--block-size}) that fail on BSD/macOS, whereas \texttt{gpt-4o-mini} used a portable \texttt{find -mtime -1}.
+The ranking is \texttt{gpt-4o-mini} (10/13) $>$ \texttt{qwen3:4b} (7/13) $>$ \texttt{gemma3:4b} (6/13). Case 58 (\texttt{"count the total number of non-blank lines across all .py files here"}, expected \texttt{5}) is a good discriminator --- all three failed it. The clearest local-vs-local split is case 57 (\texttt{"what are the 3 most common words in notes.txt?"}): \texttt{qwen3} produced the correct pipeline (\texttt{the}=4, \texttt{apple}=3, \texttt{fox}=2), while \texttt{gemma3} mis-flagged the read-only pipeline as destructive and aborted. On case 59 (\texttt{"list only the files modified in the last 24 hours, newest first"}) both local models emitted GNU-only \texttt{ls} flags (\texttt{--time-style}, \texttt{--block-size}) that fail on BSD/macOS, whereas \texttt{gpt-4o-mini} used a portable \texttt{find -mtime -1}.
 
 \subsubsection{Logged Reliability Numbers}
 \begin{itemize}
@@ -515,7 +515,7 @@ The ranking is \texttt{gpt-4o-mini} (10/13) $>$ \texttt{qwen3:4b} (7/13) $>$ \te
 \subsection{Local-vs-Local Head-to-Head: qwen3 vs gemma3}
 The assignment asks specifically for a comparison between a local model adapted for tool-calling (\texttt{qwen3:4b-instruct}, native) and one that is not (\texttt{gemma3:4b}, prompted JSON). They split the wins --- neither is uniformly better --- and the differences land exactly where structured output and tool-use decisions matter.
 
-\textbf{qwen wins (case 57, ``3 most common words'').} qwen composes a correct pipeline and gets the right counts; gemma mis-flags the read-only pipeline as destructive and aborts, answering nothing:
+\textbf{qwen wins (case 57, \texttt{"what are the 3 most common words in notes.txt?"}).} qwen composes a correct pipeline and gets the right counts; gemma mis-flags the read-only pipeline as destructive and aborts, answering nothing:
 \begin{lstlisting}[language=bash, caption={qwen produces the answer; gemma over-flags a read-only command and stops.}]
 # qwen3 (native) -- correct
 $ grep -oE '([a-z]+)' notes.txt | sort | uniq -c | sort -nr | head -n 3
@@ -528,7 +528,7 @@ This command modifies the filesystem:
 Proceed? [y/N] Aborted. (Nothing was executed.)
 \end{lstlisting}
 
-\textbf{gemma wins (case 5, ``how do I \dots'').} The tool-calling model is not always the smarter one: gemma correctly explains and runs nothing, while qwen wrongly executes instead of answering:
+\textbf{gemma wins (case 5, \texttt{"how do I see hidden files?"}).} The tool-calling model is not always the smarter one: gemma correctly explains and runs nothing, while qwen wrongly executes instead of answering:
 \begin{lstlisting}[language=bash, caption={gemma answers the question; qwen runs a command it should not.}]
 # gemma3 -- correct: explains, runs nothing
 $ doit "how do I see hidden files?"
@@ -538,7 +538,9 @@ $ doit "how do I see hidden files?"
 $ ls -a
 \end{lstlisting}
 
-\textbf{Stability and structured output.} On the prompted adapter gemma is unstable run-to-run: the same joke request refused once and was told the next run, and case 60 produced a malformed reply on one run and a hard ``no JSON after 2 attempts'' failure on the next. qwen on the native adapter produced \textbf{zero} JSON/tool-call failures across all 13 cases --- the native tool-calling protocol simply removes the JSON-parsing failure mode. qwen's one quirk was the opposite of gemma's recklessness: over-caution, refusing in case~1 to list a harmless \texttt{/tmp} sandbox at all.
+\textbf{Stability and structured output.} On the prompted adapter gemma is unstable run-to-run: the same joke request refused once and was told the next run, and case 60 (\texttt{"rename every .txt file in this folder to have a .md extension instead"}) produced a malformed reply on one run and a hard ``no JSON after 2 attempts'' failure on the next. qwen on the native adapter produced \textbf{zero} JSON/tool-call failures across all 13 cases --- the native tool-calling protocol simply removes the JSON-parsing failure mode. qwen's one quirk was the opposite of gemma's recklessness: over-caution, refusing in case~1 (\texttt{"show me all files here, including hidden ones"}) to list a harmless \texttt{/tmp} sandbox at all.
+
+\textbf{History parroting.} A further weakness shows over a longer session: once one command dominates gemma's replayed history, it stops reading the request and just repeats that command. In one run it handled \texttt{delete junk.txt} and \texttt{save the listing to files.txt} correctly, then returned the same \texttt{ls > files.txt} for every following request --- \texttt{install htop}, \texttt{open vim}, even \texttt{forget the files} --- copying its own last output instead of resolving the new instruction (\texttt{logs/3A783293.jsonl}). \texttt{gpt-4o-mini} handled the identical sequence correctly.
 
 \subsection{Limitations}
 Model flexibility is bounded by the weakest supported model. The 4B local models we tested (\texttt{qwen3:4b-instruct}, \texttt{gemma3:4b}) are materially less reliable than the API model (7/13 and 6/13 versus 10/13 in Table~\ref{tab:model_results}), and the prompted adapter grants only \textbf{one} JSON-repair retry before giving up --- a persistently malformed reply aborts the turn. We also observed model-specific quirks the framework cannot fix from outside: \texttt{gemma3} mis-flagging read-only pipelines as destructive, and both local models emitting GNU-only flags that fail on BSD/macOS. The adapter guarantees a \emph{uniform interface}, not uniform competence.

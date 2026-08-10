@@ -55,6 +55,7 @@ Companion to REPORT_REVIEW.md. Check off as you go.
 - [x] D3. ✅ DONE — logged numbers (guard 6/15, parser 10/10, live JSON failures) are in §4 "Logged Reliability Numbers".
 - [x] D4. ✅ DONE — sentence added after the model table: used the ~4B tier the assignment permits rather than the plan's 7–8B, because we served models locally and downloading/running larger ones on our own machines was too slow (Yuval's reason).
 - [x] D5. ✅ DONE — qwen native over-caution (refused to list a `/tmp` sandbox, case 1) is in the head-to-head "Stability and structured output" paragraph.
+- [x] D6. ✅ DONE — gemma3 history-parroting inserted as a short "History parroting" paragraph in the §Model flexibility head-to-head (gemma repeats `ls > files.txt` for install htop / open vim / forget; gpt-4o-mini handles the same sequence correctly; cites logs/3A783293.jsonl). Full source: `report/weak_model_history_parroting.md`.
 
 ## E. Architecture overview (§1) — E1 DONE (via the §1 intro); E2–E5 still owed
 
@@ -105,14 +106,14 @@ The assignment requires **limitations for each section**. Add a short Limitation
 ### Section 2 (dangerous commands)
 - [x] H13. ✅ DONE (report-wide) — stripped the `Design Decision:` prefix from all 17 decision-box titles (topic only now); the `\subsection{Design Decisions}` heading is the subtitle before each group. Fixed §4 (Model flexibility), where the adapter box sat under Implementation Details with no such heading — added a `Design Decisions` subtitle before it. The 2 limitation-decision boxes now read `Limitation: <topic>` under their `\subsection{Limitations}`. Verified: zero `Design Decision:` prefixes remain, every box has its subtitle.
 - [x] H14. ✅ DONE — real guard-override example (`ls > files.txt`) + 6/15 tally added to §2.
-- [ ] H15. **BEFORE SUBMIT:** manually re-run the §2 safety flow end-to-end (destructive confirm, guard override, sudo refusal, interactive refusal) to confirm current behavior.
+- [x] H15. ✅ DONE (2026-08-10) — manually re-ran §2 safety flow LIVE on gpt-4o-mini/native, fresh session: destructive confirm/decline ✓, `>`-redirect guard gate ✓, `install htop` → clarify → declined (no sudo run) ✓, `open vim` → refused via `answer` ✓. NOTE found+fixed en route: `doit.cfg` was left on `ollama/gemma3:4b` (prompted) from the comparison work — switched back to `openai/gpt-4o-mini`/native. **Set doit.cfg to the intended default before submitting.**
 - [x] H16. ✅ DONE — `acdl/v2_safety.acdl` AVAILABLE_TOOLS comment now spells out `run_command(command, is_destructive, explanation)` and notes those two are safety layer 1. Kept it in the COMMENT (not the rendered node), so `acdl_v2.png` does NOT need re-rendering. The `.acdl` listing in the report auto-updates via `\lstinputlisting`.
 
 ## Z. Before submission (final checklist)
 
 - [ ] Z1. ⭐ **BEFORE SUBMIT (Yuval will add this):** include `tests/cases.md` (the ~60-case suite the models were run against) as an appendix so graders see exactly what was tested. Yuval is adding it as a report appendix himself — **do not forget to actually include it before submission.**
 - [x] Z2. ✅ DONE — H8 complete: all repo-internal filenames swapped to generic ones (`notes.txt`/`report.txt`/`photos`/`backup.sh`/`train.py`); `grep` confirms none left. (If genuine re-run output is wanted instead of the name-swap, that's H11.)
-- [ ] Z3. H15 — manual end-to-end safety re-run.
+- [x] Z3. ✅ DONE — see H15 (live safety re-run passed on gpt-4o-mini/native, fresh session).
 - [ ] Z4. Compile the PDF (`cd report && pdflatex report.tex` ×2, or Overleaf) and fix any listing/UTF-8 errors.
 - [ ] Z5. Check the course's **AI-assistance disclosure** policy and comply.
 - [ ] Z6. Final read-through for the owed prose: §0 overview depth (E2/E3/E4 tables + trees), Conclusion (F7), D2/D4/D5 sentences. (Intro/H4 and per-section Limitations/F1–F6b now DONE — just re-read them for voice.)
