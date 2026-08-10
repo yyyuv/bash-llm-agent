@@ -111,7 +111,7 @@
     \vspace{1.5cm}
     
     \vfill
-    {\large\color{secondary} July 2026 \par}
+    {\large\color{secondary} August 2026 \par}
 \end{titlepage}
 
 \tableofcontents
@@ -259,7 +259,7 @@ If the user's prompt represents a command, the LPU calls the \texttt{run\_comman
 \begin{decisionbox}{Shell-Function Wrapper for Directory Navigation (\texttt{cd})}
     \textbf{Problem:} When a user runs a Python script, it runs in a child subprocess. Any directory change (\texttt{cd}) executed by the script is lost when the script exits, returning the user to the original terminal directory.
     
-    \textbf{Solution:} We resolved this by writing a dual-shell wrapper. The \texttt{change\_dir} tool verifies that the path exists and writes it to a temporary file: \texttt{\textasciitilde/.doit/cd\_target\_\$DOIT\_SESSION}. Upon \texttt{doit}'s termination, a shell function wrapper intercepts the exit, checks for the presence of this file, runs the native \texttt{cd} command inside the parent shell, and deletes the file.
+    \textbf{Solution:} We resolved this by writing a dual-shell wrapper. The \texttt{change\_dir} tool verifies that the path exists and writes it to a temporary file: \texttt{\textasciitilde/.doit/cd\_target\_\$DOIT\_SESSION}. Upon \texttt{doit}'s termination, a shell function wrapper intercepts the exit, checks for the presence of this file, runs the native \texttt{cd} command inside the parent shell, and deletes the file. The \texttt{change\_dir} tool and shell snippet that implement this are covered in full in Section~\ref{sec:change_dir}.
     \end{decisionbox}
 
 \begin{decisionbox}{Dual-Shell Variable Normalization}
@@ -290,6 +290,17 @@ $ doit "how much disk space is left?"
 $ df -h
 Filesystem     Size   Used  Avail Capacity iused ifree %iused  Mounted on
 /dev/disk3s1   926Gi   17Gi  702Gi     3%    459k  4.3G    0%   /
+\end{lstlisting}
+
+Not every request maps to a command. A physically impossible request is declined with the \texttt{answer} tool, and an off-topic request receives a short in-role refusal rather than compliance --- in both cases nothing runs (\texttt{logs/phase1/p1demo.jsonl}):
+
+\begin{lstlisting}[language=bash, caption={Impossible and off-topic requests: the model answers instead of running a command.}]
+$ doit "make my laptop fly"
+I'm a shell command agent and can't help with that!
+
+$ doit "tell me a joke"
+I'm a shell command agent and can't help with jokes, but I'm here to
+assist you with commands and tasks!
 \end{lstlisting}
 
 \subsection{Raw LPU Exchange (native tool-calling)}
@@ -414,7 +425,7 @@ The diagram below shows the only safety part the model actually sees: a \texttt{
 % SECTION 4: MODEL FLEXIBILITY
 \section{Model flexibility}
 \label{sec:model_flexibility}
-To ensure the utility can run independently of commercial API keys, we extended the system to run local models locally.
+To ensure the utility can run independently of commercial API keys, we extended the system to run models locally as well.
 
 \subsection{Implementation Details}
 We introduced a configuration file \texttt{\textasciitilde/doit.cfg} to declare the active model and its adapter. We implement two code adapters behind a unified interface.
@@ -503,7 +514,7 @@ We ran cases 1--8 (basic) and 56--60 (hard single-command discriminators) from \
     \label{tab:model_results}
 \end{table}
 
-The ranking is \texttt{gpt-4o-mini} (10/13) $>$ \texttt{qwen3:4b} (7/13) $>$ \texttt{gemma3:4b} (6/13). Case 58 (\texttt{"count the total number of non-blank lines across all .py files here"}, expected \texttt{5}) is a good discriminator --- all three failed it. The clearest local-vs-local split is case 57 (\texttt{"what are the 3 most common words in notes.txt?"}): \texttt{qwen3} produced the correct pipeline (\texttt{the}=4, \texttt{apple}=3, \texttt{fox}=2), while \texttt{gemma3} mis-flagged the read-only pipeline as destructive and aborted. On case 59 (\texttt{"list only the files modified in the last 24 hours, newest first"}) both local models emitted GNU-only \texttt{ls} flags (\texttt{--time-style}, \texttt{--block-size}) that fail on BSD/macOS, whereas \texttt{gpt-4o-mini} used a portable \texttt{find -mtime -1}.
+The ranking is \texttt{gpt-4o-mini} (10/13) $>$ \texttt{qwen3:4b} (7/13) $>$ \texttt{gemma3:4b} (6/13). Case 58 (\texttt{"count the total number of non-blank lines across all .py files here"}, expected \texttt{5}) is a good discriminator --- all three failed it. The clearest local-vs-local split is case 57 (\texttt{"what are the 3 most common words in notes.txt?"}): \texttt{qwen3} produced the correct pipeline (\texttt{the}=4, \texttt{apple}=3, \texttt{fox}=2), while \texttt{gemma3} mis-flagged the read-only pipeline as destructive and aborted. \texttt{gpt-4o-mini} also failed this case, so case 57 is the one place a local model outperformed the API model. On case 59 (\texttt{"list only the files modified in the last 24 hours, newest first"}) both local models emitted GNU-only \texttt{ls} flags (\texttt{--time-style}, \texttt{--block-size}) that fail on BSD/macOS, whereas \texttt{gpt-4o-mini} used a portable \texttt{find -mtime -1}.
 
 \subsubsection{Logged Reliability Numbers}
 \begin{itemize}
@@ -600,7 +611,14 @@ $ ls -ltr
 total 232
 -rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 notes.txt
 -rw-r--r--@  1 yuval  staff  30675 Jul  7 18:57 report.txt
+
+$ DOIT_SESSION=demo doit "by creation time"
+The `ls` command on macOS does not support sorting by creation time
+directly; it can only sort by modification time. Would you like to sort
+by modification time instead?
 \end{lstlisting}
+
+The final turn shows the agent being honest about a platform limitation rather than parroting a flag: macOS/BSD \texttt{ls} has no portable creation-time sort, so it answers instead of emitting a command that would not do what was asked (\texttt{logs/phase4/live\_multiturn\_gpt4omini.txt}).
 
 \subsection{Limitations}
 History is a fixed window of the last $K=10$ turns; anything older is dropped entirely rather than summarized, so a reference to a command from twelve turns ago cannot be resolved. Compaction (folding evicted turns into a running digest) is the natural remedy but is described, not implemented. Separately, when the shell snippet is not installed \texttt{DOIT\_SESSION} falls back to \texttt{"default"}, and all terminals then share a single history stream.
@@ -859,6 +877,19 @@ $ doit "why did my last command fail?"
 The command 'cat status.log' failed because there is no file named 'status.log' inside the 'reports' folder you just created.
 \end{lstlisting}
 
+The assignment's headline case, ``summarize what I just did'', additionally shows the user/\texttt{doit} split: the summary is built only from the commands the user typed, while \texttt{doit}'s own invocations are filtered out (by \texttt{load\_recent\_user\_commands}) before the block ever reaches the model (\texttt{logs/phase7/live\_summarize\_gpt4omini.txt}):
+
+\begin{lstlisting}[language=bash, caption={Summarizing manual actions; prior doit invocations are excluded, not counted as user activity.}]
+$ mkdir data2
+$ cd logs
+$ cd ..
+$ mkdir data3
+$ doit "summarize what I just did"
+You created two directories named data2 and data3 in your current project
+folder, and navigated into the logs directory and back. (The earlier
+doit "..." calls are excluded -- they are the agent's own actions, not yours.)
+\end{lstlisting}
+
 \subsection{Limitations}
 \begin{decisionbox}{Limitation: Manual Dotfile Synchronization}
     \textbf{Problem:} Updates to the snippet template in \texttt{shell/zshrc\_snippet.sh} do not automatically synchronize with the user's active configuration file.
@@ -886,11 +917,7 @@ To satisfy output-awareness requirements, the agent must be able to inspect prev
 \subsection{Implementation Details}
 When \texttt{run\_command} executes a shell instruction, the controller captures the return code, stdout, and stderr. These outputs are stored inside the session history JSONL logs.
 
-When building the context for subsequent turns, the controller replays the past turns. To prevent token bloat, the controller applies a tiered truncation strategy defined in \texttt{doitlib/tools.py} via \texttt{truncate\_for\_context(text)}:
-\begin{itemize}
-    \item \textbf{Hot Budget:} The output of the current/most-recent turn is allocated up to 3,000 characters head and 1,000 characters tail, ensuring listings and detailed compiler outputs are fully accessible.
-    \item \textbf{Cold Budget:} Older turns in the history are truncated to 1,000 characters head and 300 characters tail, which is sufficient to capture errors or file lists without exceeding context limits.
-\end{itemize}
+When building the context for subsequent turns, the controller replays the past turns, applying the same hot/cold head-and-tail truncation described in Section~\ref{sec:multi_turn} (\texttt{truncate\_for\_context} in \texttt{doitlib/tools.py}): the current turn keeps the larger hot budget so a follow-up can still see its full output, while older turns are cut to the smaller cold budget to save tokens.
 
 \subsection{Design Decisions}
 
@@ -1118,6 +1145,15 @@ The diagram below shows how planning reaches the model: a \texttt{PLAN\_INSTRUCT
 
 \lstinputlisting[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true, caption={ACDL source for \texttt{DoitAgentPlans} (\texttt{acdl/v9\_plans.acdl}).}, label={lst:acdl_v9}]{../acdl/v9_plans.acdl}
 
+% SECTION 13: CONCLUSION
+\section{Conclusion}
+\label{sec:conclusion}
+The \texttt{doit} agent implements every section of the assignment on top of a single architectural rule: the Controller owns all state, safety, and execution, and the LPU only ever emits a structured tool decision. Holding that boundary is what let each later feature enter as exactly one of three things --- a new tool, a new context block, or new controller logic --- without disturbing the parts already built, and it let the same eight-tool schema drive three different models through one interface.
+
+The measurements support the design's two safety nets. The deterministic guard overrode the model's own \texttt{is\_destructive} flag in 6 of 15 cases, and the prompted-adapter parser recovered malformed JSON in 10 of 10 offline cases, while the native adapter produced no tool-call failures across the live comparison (Section~\ref{sec:model_flexibility}). Model competence, however, was not uniform: on the single-command suite \texttt{gpt-4o-mini} scored 10/13 against 7/13 and 6/13 for the 4B local models, and the weaker models exposed failure modes the framework cannot fix from outside --- over-flagging read-only pipelines as destructive, emitting GNU-only flags on BSD/macOS, and parroting their own replayed history.
+
+Several limitations remain, documented in their sections: history is a fixed $K=10$ window with no compaction, memory IDs are recycled, the regex guard trades precision for determinism, and a plan budget can be exhausted by a model that does not batch same-type actions. The most useful lessons came from the failures we hit and fixed live --- a prompt rule that only worked once it was moved to the point of conflict, a memory edit that crashed on parallel tool-calls, and a plan that stopped halfway --- and those, more than the passing cases, shaped the final system.
+
 \appendix
 
 % APPENDIX A: PROMPTS AND TOOL SCHEMAS
@@ -1285,27 +1321,7 @@ The other-sessions block (\texttt{other\_sessions\_block.txt}):
 
 \subsection{Tool Schemas}
 \label{sec:tool_schemas}
-The LPU emits exactly one tool call per step. Table~\ref{tab:tools} lists the eight tools and their required arguments (defined in \texttt{doitlib/tools.py}). For the native adapter these travel out-of-band via LiteLLM's \texttt{tools=} parameter; for the prompted adapter they are rendered into the system prompt and the model must reply with a single JSON object of the shape \texttt{\{"tool": "<name>", "args": \{ ... \}\}}.
-
-\begin{table}[H]
-    \centering
-    \caption{The eight tools (the full decision schema).}
-    \begin{tabularx}{\textwidth}{llX}
-        \toprule
-        \textbf{Tool} & \textbf{Required args} & \textbf{Purpose} \\
-        \midrule
-        \texttt{run\_command} & \texttt{command}, \texttt{is\_destructive}, \texttt{explanation} & Translate and run one shell command; the \texttt{is\_destructive} flag is safety layer 1. \\
-        \texttt{answer} & \texttt{text} & Reply in plain text; also the finish signal that ends the turn. \\
-        \texttt{ask\_user} & \texttt{question} (\texttt{options} optional) & Ask one clarifying question, answered within the same turn. \\
-        \texttt{remember} & \texttt{fact} & Store a durable fact/preference about the user. \\
-        \texttt{forget} & \texttt{id} & Delete a stored fact by its \texttt{[id]}. \\
-        \texttt{change\_dir} & \texttt{path} & Change the shell's directory via the wrapper (the \texttt{cd} trap fix). \\
-        \texttt{read\_session} & \texttt{session\_id} & Fetch another terminal session's full history on demand. \\
-        \texttt{plan} & \texttt{steps} & Announce a multi-step plan (offered only when \texttt{enable\_plans} is set). \\
-        \bottomrule
-    \end{tabularx}
-    \label{tab:tools}
-\end{table}
+The LPU emits exactly one tool call per step. The eight tools and their required arguments are listed in Table~\ref{tab:tools_overview} (Section~\ref{sec:tool_set}); their complete definitions in \texttt{doitlib/tools.py} follow below. For the native adapter these travel out-of-band via LiteLLM's \texttt{tools=} parameter; for the prompted adapter they are rendered into the system prompt and the model must reply with a single JSON object of the shape \texttt{\{"tool": "<name>", "args": \{ ... \}\}}.
 
 The complete tool definitions --- \texttt{TOOL\_SCHEMAS} in \texttt{doitlib/tools.py}, including every argument's type, description, and required-fields list --- are listed below. This is exactly what the native adapter passes via \texttt{tools=}, and what the prompted adapter renders into the system prompt.
 
