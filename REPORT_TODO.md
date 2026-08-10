@@ -26,7 +26,7 @@ Companion to REPORT_REVIEW.md. Check off as you go.
 - [x] A1. ✅ DONE — `acdl/*.acdl` source shown as `\lstinputlisting` next to every figure (auto-syncs).
 - [x] A2. ✅ DONE — `SAFETY_INSTRUCTIONS` spelling fixed in source; figures re-rendered by Yuval.
 - [x] A3. ✅ DONE — settled on `sys.history` (corpus: action histories are `sys.*`), applied to all specs.
-- [ ] A4. §10 (output awareness): add one line pointing to the history ACDL (output awareness reuses the replay context of the history figure; truncation budgets shown there). *(Prose — small.)*
+- [x] A4. ✅ DONE — added an "ACDL Context" pointer to BOTH §Richer interactions and §Output awareness (the two sections with no ACDL figure): each notes it adds no new context block and points to the history spec `fig:acdl_v4`. Closes the "missing ACDL coverage" question for those sections.
 
 ## B. Prompts, tool definitions, schemas
 
@@ -43,15 +43,18 @@ Companion to REPORT_REVIEW.md. Check off as you go.
 - **§Richer interactions** — added "What Worked and What Didn't: the Repeated-Question Bug" (the history-bleed bug): buggy 3-turn transcript → failed separate-paragraph fix → root cause (two rules conflicting by proximity/specificity) → the in-rule fix that worked → lesson. Source: `report/history_bleed_bug.md`, logs/phase5/.
 - **§Output awareness** — added the stronger follow-up-command example (runs `file …` instead of guessing) + two honest behavioral limitations (non-deterministic single-command batching; facts ≠ good delete verdict). Source: `report/output_awareness_followup*.md`, logs/phase9/.
 
-*(Still on disk, NOT yet written into a section — candidates for the Conclusion/F7 or their own sections: phase6_5 wrong-dir↔retest; phase9 budget-exhaustion↔plan-chain (P9e); phase6 wrong-forget↔retarget. `report/model_comparison_data.md` D2/D4/D5 is explicitly marked "write prose yourself" — left for Yuval.)*
+**Three more bug/fix cases (2026-08-10, built from logs/sessions):**
+- [x] `report/plan_budget_exhaustion_bug.md` (Phase 9 P9e) — **INSERTED** into §Further extensions as "What Worked and What Didn't: a Plan that Stopped Halfway" (shortened/simplified per Yuval).
+- [x] `report/wrong_forget_parallel_toolcalls_bug.md` (Phase 6 P6e) — **INSERTED** into §Memory as "What Worked and What Didn't: a Memory Edit that Crashed" (shortened/simplified).
+- [ ] `report/change_dir_same_turn_bug.md` (Phase 6.5 P6.5b/d) — **source file only, NOT inserted** (deliberately skipped: its point-of-decision lesson is already made + cross-referenced in §Richer and §Changing directories). Fold a 1–2 sentence mention into §Changing directories' Limitations if wanted.
 
 ## D. Model comparison
 
 - [x] D1. ✅ DONE — per-case results table (V/~/X, 10/7/6) is in §4 "Case-by-Case Results".
-- [ ] D2. ⚠ PARTIAL — the case-57 qwen-vs-gemma split + reliability numbers are in §4, but a fuller qwen-vs-gemma **discussion paragraph** is still light. *(Prose — expand from `report/model_comparison_data.md` D2.)*
+- [x] D2. ✅ DONE — new §Model flexibility subsection "Local-vs-Local Head-to-Head: qwen3 vs gemma3" with real transcripts: qwen wins case 57 (correct pipeline vs gemma over-flagging), gemma wins case 5 (gemma answers vs qwen wrongly executes), + a stability/structured-output paragraph (gemma run-to-run instability, qwen 0 JSON failures). Directly satisfies the assignment's required tool-vs-non-tool local comparison with a weaker-model-fails interaction.
 - [x] D3. ✅ DONE — logged numbers (guard 6/15, parser 10/10, live JSON failures) are in §4 "Logged Reliability Numbers".
-- [ ] D4. §3/§4: one sentence on the 4B choice (assignment allows 4B tier; hardware/latency; the plan originally named 7–8B). *(Prose — one sentence.)*
-- [ ] D5. ⚠ note the qwen native quirk (over-caution: refused a `/tmp` sandbox) — material in `model_comparison_data.md` D5; not yet in report prose.
+- [x] D4. ✅ DONE — sentence added after the model table: used the ~4B tier the assignment permits rather than the plan's 7–8B, because we served models locally and downloading/running larger ones on our own machines was too slow (Yuval's reason).
+- [x] D5. ✅ DONE — qwen native over-caution (refused to list a `/tmp` sandbox, case 1) is in the head-to-head "Stability and structured output" paragraph.
 
 ## E. Architecture overview (§1) — E1 DONE (via the §1 intro); E2–E5 still owed
 
@@ -92,7 +95,7 @@ The assignment requires **limitations for each section**. Add a short Limitation
 - [ ] H6. Show/reference the §1 system prompt (now in Appendix A — add a short excerpt or pointer). *(Prose — small.)*
 - [ ] H7. Make the model explicit in the §1 narrative (`openai/gpt-4o-mini`), not only in the decision box. *(Prose — small.)*
 - [x] H8. ✅ DONE — §1/§5/§10 example listings fully neutralized: `README.md`→`notes.txt`, `DECISIONS.md`→`report.txt`, `acdl`→`photos`, `doit`→`backup.sh`; also fixed §7's `find -name "*.py"` output that wrongly showed `./doit` → `./train.py`. `grep` confirms zero `CLAUDE.md`/`DECISIONS.md`/`README.md` left in report.tex. (Done by name-swap, not a live re-run — the listings are illustrative; if you'd rather have genuine re-run output, that's H11.)
-- [ ] H9. Add a failings/issues subsection to §1 (= F1).
+- [x] H9. ✅ DONE — §Single command now has a Limitations subsection (single-command cap can't chain; output not fed back / no meant-vs-said check; portability depends on the model). Every section (12/12) now has a Limitations block, per the assignment's per-section requirement.
 - [x] H10a. ✅ DONE — v1 spec lists only `run_command, answer` (change_dir removed).
 - [x] H10b. ✅ DONE — v1 annotates that native tools travel out-of-band via `tools=` (only the prompted adapter embeds them).
 - [x] H10c. ✅ DONE — v1 shows ENV_INFO and user_request as two separate `U:` messages (matches `build_messages`).
@@ -113,3 +116,25 @@ The assignment requires **limitations for each section**. Add a short Limitation
 - [ ] Z4. Compile the PDF (`cd report && pdflatex report.tex` ×2, or Overleaf) and fix any listing/UTF-8 errors.
 - [ ] Z5. Check the course's **AI-assistance disclosure** policy and comply.
 - [ ] Z6. Final read-through for the owed prose: §0 overview depth (E2/E3/E4 tables + trees), Conclusion (F7), D2/D4/D5 sentences. (Intro/H4 and per-section Limitations/F1–F6b now DONE — just re-read them for voice.)
+- [ ] whenever a test case is mentioned in the report, add its exact description. the cases.md appendix is an appendix but people should understand the report without opening the appendixes:
+4.6 Local-vs-Local Head-to-Head: qwen3 vs gemma3
+The assignment asks specifically for a comparison between a local model adapted for tool-calling
+(qwen3:4b-instruct, native) and one that is not (gemma3:4b, prompted JSON). They split the
+wins — neither is uniformly better — and the differences land exactly where structured output
+and tool-use decisions matter.
+qwen wins (case 57, “3 most common words”). qwen composes a correct pipeline
+and gets the right counts; gemma mis-flags the read-only pipeline as destructive and aborts,
+answering nothing:
+1 # qwen3 ( native ) -- correct
+2 $ grep - oE ’ ([ a - z ]+) ’ notes . txt | sort | uniq -c | sort - nr | head -n 3
+3 4 the
+4 3 apple
+12
+Assignment 3: Agentic Shell (doit) Yuval Reuveni & Arbel Tepper
+5 2 fox
+6 # gemma3 ( prompted ) -- over - flags a read - only pipeline , aborts , answers
+nothing
+7 This command modifies the filesystem :
+8 cat notes . txt > temp . txt && tr ... | sort | uniq -c | sort - nr |
+head -3
+9 Proceed ? [ y / N ] Aborted . ( Nothing was executed .)
