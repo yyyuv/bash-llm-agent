@@ -52,8 +52,8 @@ Companion to REPORT_REVIEW.md. Check off as you go.
 ## E. Architecture overview (§1) — E1 DONE (via the §1 intro); E2–E5 still owed
 
 - [x] E1. ✅ DONE — §1 "Introduction & System Overview" covers the Controller-wraps-LPU principle + the loop (`fig:architecture`) and context assembly (`fig:context_map`). *(Gap: the one-sentence "every feature = tool | context block | controller logic" framing rule isn't stated — add it if you want E1 airtight.)*
-- [ ] E2. §0: final 8-tool inventory table — **reuse the table now in Appendix A** (move/duplicate a compact version up front). *(I can do.)*
-- [ ] E3. §0: `~/.doit/` state-layout tree (sessions/, memories.json, shell_hist/, logs/) + repo structure. *(I can do.)*
+- [x] E2. ✅ DONE — §1 "The Tool Set": 8-tool inventory table (`tab:tools_overview`) up front, pointing to the full `TOOL_SCHEMAS` in Appendix A. Also reconciled the intro's "five universal tools" line → "core set grows to eight" (fixes the H4 wording flag).
+- [x] E3. ✅ DONE — §1 "State Layout": `~/.doit/` state tree (sessions/, memories.json, shell_hist/, cd_target, logs/). Repo-structure listing was dropped as redundant (not required by assignment §319–338; duplicates the submitted code + architecture narrative). §1.3 (Context Assembly) prose also simplified.
 - [ ] E4. §0: one paragraph on the logging infrastructure (raw LLM traffic in `logs/` as evidence) + where submitted logs live. *(Prose.)*
 - [ ] E5. §1: state which system-prompt blocks exist at v1 and forward-reference how later phases only *add* context blocks. *(Prose.)*
 
@@ -81,30 +81,30 @@ The assignment requires **limitations for each section**. Add a short Limitation
 - [x] H1. ✅ DONE — architecture diagram removed from the cover (title page now text-only).
 - [x] H2. ✅ DONE — diagram moved into new §1 "Introduction & System Overview" as `fig:architecture`, **with the added Controller→User arrow** ("Answer / Output" return path).
 - [x] H3. ✅ DONE — `\tableofcontents` added after the title page.
-- [x] H4. ✅ DONE — introduction added as §1 (Yuval's supplied intro, judged good enough, used verbatim; includes the context-assembly figure `fig:context_map`). ⚠ NOTE: intro says "five universal tools" — the final system has 8 (see Appendix A). Left as-is (author's prose / core-design framing); reword if a grader would flag it.
+- [x] H4. ✅ DONE — introduction added as §1, then corrected for accuracy/loyalty to the code: "five universal tools" → "core set grows to eight"; code-mapping fixed (`env.history` → `sys.history`) and completed to all 7 context blocks with the real `build_messages` splice order; `config.py` field list completed. Includes `fig:architecture` + `fig:context_map` + the E2 tool table + E3 layout listings.
 
 ### Section 1 (single command)
 - [ ] H5. State the available tools at this stage (run_command, answer) in the §1 body. *(Prose — small.)*
 - [ ] H6. Show/reference the §1 system prompt (now in Appendix A — add a short excerpt or pointer). *(Prose — small.)*
 - [ ] H7. Make the model explicit in the §1 narrative (`openai/gpt-4o-mini`), not only in the decision box. *(Prose — small.)*
-- [ ] H8. ⚠ PARTIAL — **BEFORE SUBMIT (Arbel):** §1/§5/§10 example listings leaked repo internals. `CLAUDE.md` has been swapped to `README.md`, but `DECISIONS.md` still appears (§1 lines 243/476/481/488, §10 lines 750/753) — and `README.md`/`DECISIONS.md` are still recognizably repo files. Finish by re-running those demos in a neutral folder with generic files (or swap the remaining names to generic ones like `notes.txt`/`report.txt`).
+- [x] H8. ✅ DONE — §1/§5/§10 example listings fully neutralized: `README.md`→`notes.txt`, `DECISIONS.md`→`report.txt`, `acdl`→`photos`, `doit`→`backup.sh`; also fixed §7's `find -name "*.py"` output that wrongly showed `./doit` → `./train.py`. `grep` confirms zero `CLAUDE.md`/`DECISIONS.md`/`README.md` left in report.tex. (Done by name-swap, not a live re-run — the listings are illustrative; if you'd rather have genuine re-run output, that's H11.)
 - [ ] H9. Add a failings/issues subsection to §1 (= F1).
 - [x] H10a. ✅ DONE — v1 spec lists only `run_command, answer` (change_dir removed).
 - [x] H10b. ✅ DONE — v1 annotates that native tools travel out-of-band via `tools=` (only the prompted adapter embeds them).
 - [x] H10c. ✅ DONE — v1 shows ENV_INFO and user_request as two separate `U:` messages (matches `build_messages`).
 - [ ] H11. Insert the real §1 logs (joke refusal C3, impossible-request C4, runs-from-anywhere C5) into §1. *(Overlaps H8 — do after neutral-dir re-run.)*
-- [ ] H12. Insert a trimmed raw request/response JSON in §1 from `logs/phase1/llm_raw_p1demo.jsonl` (shows the `tool_calls` object). *(I can do.)*
+- [x] H12. ✅ DONE — §1 "Raw LPU Exchange (native tool-calling)": trimmed real request/response for the `ls -la` demo (real `tool_calls` id + `arguments` + usage numbers from `logs/phase1/llm_raw_p1demo.jsonl`).
 
 ### Section 2 (dangerous commands)
-- [ ] H13. Box-title style: drop the "Design Decision:" prefix, or make box titles consistent report-wide. *(Minor.)*
+- [x] H13. ✅ DONE (report-wide) — stripped the `Design Decision:` prefix from all 17 decision-box titles (topic only now); the `\subsection{Design Decisions}` heading is the subtitle before each group. Fixed §4 (Model flexibility), where the adapter box sat under Implementation Details with no such heading — added a `Design Decisions` subtitle before it. The 2 limitation-decision boxes now read `Limitation: <topic>` under their `\subsection{Limitations}`. Verified: zero `Design Decision:` prefixes remain, every box has its subtitle.
 - [x] H14. ✅ DONE — real guard-override example (`ls > files.txt`) + 6/15 tally added to §2.
 - [ ] H15. **BEFORE SUBMIT:** manually re-run the §2 safety flow end-to-end (destructive confirm, guard override, sudo refusal, interactive refusal) to confirm current behavior.
-- [ ] H16. §2 ACDL: enumerate `run_command`'s `is_destructive`+`explanation` args in the AVAILABLE_TOOLS comment (the safety-relevant schema is the point of §2). *(Small — the full schema is already in Appendix A.)*
+- [x] H16. ✅ DONE — `acdl/v2_safety.acdl` AVAILABLE_TOOLS comment now spells out `run_command(command, is_destructive, explanation)` and notes those two are safety layer 1. Kept it in the COMMENT (not the rendered node), so `acdl_v2.png` does NOT need re-rendering. The `.acdl` listing in the report auto-updates via `\lstinputlisting`.
 
 ## Z. Before submission (final checklist)
 
-- [ ] Z1. **Add the test cases:** include `tests/cases.md` (the fixed ~15+ case suite the models were run against) in the report — e.g. as an appendix listing — so graders can see exactly what was tested. *(I can add via `\lstinputlisting`/table.)*
-- [ ] Z2. ⚠ PARTIAL — H8: `CLAUDE.md`→`README.md` done in the listings; `DECISIONS.md` still leaks (§1/§10). Finish the neutral-folder re-run (or swap remaining names). **Arbel.**
+- [ ] Z1. ⭐ **BEFORE SUBMIT (Yuval will add this):** include `tests/cases.md` (the ~60-case suite the models were run against) as an appendix so graders see exactly what was tested. Yuval is adding it as a report appendix himself — **do not forget to actually include it before submission.**
+- [x] Z2. ✅ DONE — H8 complete: all repo-internal filenames swapped to generic ones (`notes.txt`/`report.txt`/`photos`/`backup.sh`/`train.py`); `grep` confirms none left. (If genuine re-run output is wanted instead of the name-swap, that's H11.)
 - [ ] Z3. H15 — manual end-to-end safety re-run.
 - [ ] Z4. Compile the PDF (`cd report && pdflatex report.tex` ×2, or Overleaf) and fix any listing/UTF-8 errors.
 - [ ] Z5. Check the course's **AI-assistance disclosure** policy and comply.

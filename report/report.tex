@@ -145,17 +145,58 @@ Following the core architecture of LLM systems, we establish a strict boundary b
     \label{fig:architecture}
 \end{figure}
 
-Rather than defining tools for specific commands (e.g., \texttt{ls} or \texttt{grep}), our agent uses a unified set of five universal tools: \texttt{run\_command}, \texttt{ask\_user}, \texttt{answer}, \texttt{remember}, and \texttt{change\_dir}. We structure this report to follow the exact sections defined in the assignment specifications, detailing the design decisions, implementation details, log evidence, and limitations encountered for each module.
+Rather than defining a tool per shell command (e.g., \texttt{ls} or \texttt{grep}), our agent exposes a small, unified set of universal tools --- the shell string handed to \texttt{run\_command} is itself the one command tool. The core set (\texttt{run\_command}, \texttt{answer}, \texttt{ask\_user}, \texttt{remember}/\texttt{forget}, \texttt{change\_dir}) grows to eight as later phases add \texttt{read\_session} and \texttt{plan}. We structure this report to follow the exact sections defined in the assignment specifications, detailing the design decisions, implementation details, log evidence, and limitations encountered for each module.
+
+\subsection{The Tool Set}
+\label{sec:tool_set}
+Every decision the LPU makes is one call to one of the eight tools in Table~\ref{tab:tools_overview}. This fixed set \emph{is} the decision schema --- the single contract every supported model codes against. The complete argument-level schemas (\texttt{TOOL\_SCHEMAS}) are in Appendix~\ref{sec:tool_schemas}.
+
+\begin{table}[H]
+    \centering
+    \caption{The eight tools that make up the agent's entire decision schema.}
+    \begin{tabularx}{\textwidth}{llX}
+        \toprule
+        \textbf{Tool} & \textbf{Required args} & \textbf{Purpose} \\
+        \midrule
+        \texttt{run\_command} & \texttt{command}, \texttt{is\_destructive}, \texttt{explanation} & Translate and run one shell command; \texttt{is\_destructive} is safety layer 1. \\
+        \texttt{answer} & \texttt{text} & Reply in plain text; also the finish signal that ends the turn. \\
+        \texttt{ask\_user} & \texttt{question} (\texttt{options} optional) & Ask one clarifying question, answered within the same turn. \\
+        \texttt{remember} & \texttt{fact} & Store a durable fact/preference about the user. \\
+        \texttt{forget} & \texttt{id} & Delete a stored fact by its \texttt{[id]}. \\
+        \texttt{change\_dir} & \texttt{path} & Change the shell's directory via the wrapper (the \texttt{cd}-trap fix). \\
+        \texttt{read\_session} & \texttt{session\_id} & Fetch another terminal session's full history on demand. \\
+        \texttt{plan} & \texttt{steps} & Announce a multi-step plan (offered only when \texttt{enable\_plans} is set). \\
+        \bottomrule
+    \end{tabularx}
+    \label{tab:tools_overview}
+\end{table}
+
+\subsection{State Layout}
+\label{sec:layout}
+All runtime state lives under \texttt{\textasciitilde/.doit/}, keyed by the per-terminal \texttt{DOIT\_SESSION} id, so concurrent windows stay isolated (Section~\ref{sec:multi_tasking}):
+
+\begin{lstlisting}[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true, caption={Runtime state under \texttt{\textasciitilde/.doit/}.}]
+~/.doit/                 # all runtime state, keyed by DOIT_SESSION
+  sessions/<id>.jsonl    # one JSON record per turn (request, steps, outputs, answer)
+  memories.json          # global [{id, ts, text}] facts, shared across all sessions
+  shell_hist/<id>        # ts|cwd|cmd lines from the shell hook (user awareness)
+  cd_target_<id>         # change_dir hand-off file, read by the shell wrapper
+  logs/                  # full raw LLM requests/responses (report evidence)
+\end{lstlisting}
 
 \subsection{Context Assembly and Code Mapping}
 \label{sec:context_mapping}
-Every block of context defined in our formal Agent Context Description Language (ACDL) schemas maps directly to a named Python function in the \texttt{doitlib/context.py} module:
+Each context block in our ACDL schemas is built by one function in \texttt{doitlib/context.py}, and \texttt{build\_messages()} assembles them in a fixed order:
 \begin{itemize}
-    \item \texttt{AGENT\_INSTRUCTIONS} $\longleftrightarrow$ \texttt{context.agent\_instructions()}
-    \item \texttt{env.cwd}, \dots $\longleftrightarrow$ \texttt{context.environment\_block()}
-    \item \texttt{env.history} $\longleftrightarrow$ \texttt{context.history\_messages()}
+    \item The single \texttt{system} message --- \texttt{AGENT\_INSTRUCTIONS}, \texttt{SAFETY\_INSTRUCTIONS}, and the per-feature \texttt{*\_INSTRUCTIONS} blocks --- $\longleftrightarrow$ \texttt{agent\_instructions()}
+    \item \texttt{ENV\_INFO} (\texttt{env.cwd}, \texttt{env.shell}, \texttt{env.os}, \texttt{env.datetime}) $\longleftrightarrow$ \texttt{environment\_block(config)}
+    \item \texttt{sys.memories} $\longleftrightarrow$ \texttt{memory\_block()}
+    \item \texttt{sys.other\_sessions} $\longleftrightarrow$ \texttt{other\_sessions\_block(session\_id)}
+    \item \texttt{sys.history} (replayed past turns) $\longleftrightarrow$ \texttt{history\_messages(session\_id)}
+    \item \texttt{env.recent\_user\_commands} $\longleftrightarrow$ \texttt{user\_shell\_history\_block(session\_id)}
+    \item \texttt{env.user\_request} $\longleftrightarrow$ \texttt{user\_request(request)}
 \end{itemize}
-This precise mapping guarantees that the formal specifications reflect the actual runtime context injected into the LPU during each turn loop execution. Figure~\ref{fig:context_map} represents this context assembly process.
+The order matters: this session's own history sits just above the request, so a follow-up like ``sort them'' resolves locally rather than against another window (Section~\ref{sec:multi_tasking}). Figure~\ref{fig:context_map} illustrates the assembly.
 
 \begin{figure}[htbp]
     \centering
@@ -215,19 +256,19 @@ If the user's prompt represents a command, the LPU calls the \texttt{run\_comman
 
 \subsection{Design Decisions}
 
-\begin{decisionbox}{Design Decision: Shell-Function Wrapper for Directory Navigation (\texttt{cd})}
+\begin{decisionbox}{Shell-Function Wrapper for Directory Navigation (\texttt{cd})}
     \textbf{Problem:} When a user runs a Python script, it runs in a child subprocess. Any directory change (\texttt{cd}) executed by the script is lost when the script exits, returning the user to the original terminal directory.
     
     \textbf{Solution:} We resolved this by writing a dual-shell wrapper. The \texttt{change\_dir} tool verifies that the path exists and writes it to a temporary file: \texttt{\textasciitilde/.doit/cd\_target\_\$DOIT\_SESSION}. Upon \texttt{doit}'s termination, a shell function wrapper intercepts the exit, checks for the presence of this file, runs the native \texttt{cd} command inside the parent shell, and deletes the file.
     \end{decisionbox}
 
-\begin{decisionbox}{Design Decision: Dual-Shell Variable Normalization}
+\begin{decisionbox}{Dual-Shell Variable Normalization}
     \textbf{Context:} Since different team members use different operating systems and shells (e.g., macOS/Zsh vs. Linux/Bash), command arguments and behavior can diverge.
     
     \textbf{Solution:} The Controller auto-detects the host shell via \texttt{\$SHELL} and includes the shell type and operating system in the environment prompt block. The system prompt instructs the LPU to emit syntax tailored to the host environment.
 \end{decisionbox}
 
-\begin{decisionbox}{Design Decision: Primary API Model Selection}
+\begin{decisionbox}{Primary API Model Selection}
     \textbf{Choice:} We selected \texttt{openai/gpt-4o-mini} as our primary API model. It is inexpensive, runs with low latency, and features robust native tool-calling capabilities that simplify core development.
 \end{decisionbox}
 
@@ -238,10 +279,10 @@ Below are two successful single-command interactions run using our primary model
 $ doit "show me all files here, including hidden ones"
 $ ls -la
 total 232
-drwxr-xr-x@  6 yuval  staff    192 Jul  7 18:23 acdl
--rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 README.md
--rw-r--r--@  1 yuval  staff  30675 Jul  7 18:57 DECISIONS.md
--rwxr-xr-x@  1 yuval  staff   1319 Jul  7 15:00 doit
+drwxr-xr-x@  6 yuval  staff    192 Jul  7 18:23 photos
+-rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 notes.txt
+-rw-r--r--@  1 yuval  staff  30675 Jul  7 18:57 report.txt
+-rwxr-xr-x@  1 yuval  staff   1319 Jul  7 15:00 backup.sh
 \end{lstlisting}
 
 \begin{lstlisting}[language=bash, caption={Disk space command execution.}]
@@ -249,6 +290,42 @@ $ doit "how much disk space is left?"
 $ df -h
 Filesystem     Size   Used  Avail Capacity iused ifree %iused  Mounted on
 /dev/disk3s1   926Gi   17Gi  702Gi     3%    459k  4.3G    0%   /
+\end{lstlisting}
+
+\subsection{Raw LPU Exchange (native tool-calling)}
+The decision the model returns is a \emph{structured tool call}, not free text. Below is the real request/response behind the first example, trimmed to essentials (full traffic in \texttt{logs/phase1/llm\_raw\_p1demo.jsonl}). The tool schemas travel out-of-band in the request's \texttt{tools} array (Appendix~\ref{sec:tool_schemas}); the model answers with a \texttt{tool\_calls} object whose \texttt{arguments} is the JSON the Controller then executes.
+
+\begin{lstlisting}[numbers=none, basicstyle=\ttfamily\scriptsize, breaklines=true, caption={Trimmed raw request/response for \texttt{doit "show me all files here, including hidden ones"} (\texttt{openai/gpt-4o-mini}).}]
+// --- request (messages trimmed; full system prompt in Appendix A) ---
+{
+  "model": "openai/gpt-4o-mini",
+  "messages": [
+    {"role": "system", "content": "You are doit, ... reply with exactly one tool call ..."},
+    {"role": "user",   "content": "Environment:\n- current directory: ...\n- shell: /bin/zsh\n- OS: Darwin (arm64)"},
+    {"role": "user",   "content": "show me all files here, including hidden ones"}
+  ],
+  "tools": [ {"type": "function", "function": {"name": "run_command", ...}}, ... ]   // schemas out-of-band
+}
+
+// --- response ---
+{
+  "choices": [{
+    "finish_reason": "tool_calls",
+    "message": {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [{
+        "type": "function",
+        "id": "call_kZJpZjMreuLpguzwwLYZ7tOq",
+        "function": {
+          "name": "run_command",
+          "arguments": "{\"command\":\"ls -la\",\"is_destructive\":false,\"explanation\":\"Lists all files in the current directory, including hidden ones.\"}"
+        }
+      }]
+    }
+  }],
+  "usage": {"prompt_tokens": 527, "completion_tokens": 38, "total_tokens": 565}
+}
 \end{lstlisting}
 
 \subsection{ACDL Context Specification: DoitAgentSingleCommand}
@@ -277,7 +354,7 @@ Safety is handled through a double-layer verification policy (defense in depth):
 
 \subsection{Design Decisions}
 
-\begin{decisionbox}{Design Decision: In-Band Self-Report vs. Separate LLM Judge Call}
+\begin{decisionbox}{In-Band Self-Report vs. Separate LLM Judge Call}
     \textbf{Alternative Rejected:} We rejected using a separate LLM call to classify command destructiveness. 
     
     \textbf{Rationale:} A second LLM call doubles latency and API costs. Because the regex guard is required to handle safety deterministically anyway, we require the LPU to report destructiveness in the same JSON object as the command itself. The regex guard acts as the fallback mechanism. If the guard overrides the model's safety flag, the event is logged for analysis.
@@ -337,9 +414,11 @@ The diagram below shows the only safety part the model actually sees: a \texttt{
 To ensure the utility can run independently of commercial API keys, we extended the system to run local models locally.
 
 \subsection{Implementation Details}
-We introduced a configuration file \texttt{\textasciitilde/doit.cfg} to declare the active model and its adapter. We implement two code adapters behind a unified interface:
+We introduced a configuration file \texttt{\textasciitilde/doit.cfg} to declare the active model and its adapter. We implement two code adapters behind a unified interface.
 
-\begin{decisionbox}{Design Decision: Native vs. Prompted Adapter Architectures}
+\subsection{Design Decisions}
+
+\begin{decisionbox}{Native vs. Prompted Adapter Architectures}
     \textbf{Native Adapter (\texttt{\_call\_native}):} For models supporting LiteLLM's JSON tool-calling protocol (e.g., \texttt{gpt-4o-mini}, \texttt{qwen3:4b-instruct}). LiteLLM passes tool schemas out-of-band and receives structured tool outputs.
     
     \textbf{Prompted Adapter (\texttt{\_call\_prompted}):} For local models that do not natively support tool-calling (e.g., \texttt{gemma3:4b}). It renders tool schemas as text, appends them to the system prompt, and enforces a strict JSON wrapper. To handle parser failures, we implement a string-based balanced brace scanner to locate JSON blocks, and allow \textbf{one retry} by appending the syntax error back to the LPU.
@@ -453,13 +532,13 @@ When \texttt{doit} runs, it loads the session ID from the environment variable \
 
 \subsection{Design Decisions}
 
-\begin{decisionbox}{Design Decision: JSONL Storage Format}
+\begin{decisionbox}{JSONL Storage Format}
     \textbf{Problem:} Selecting an appropriate storage format for history.
     
     \textbf{Choice:} We chose JSONL (JSON Lines) files over SQLite. JSONL is lightweight, human-readable, and allows O(1) appends. It facilitates debugging and log evidence curation for the report.
 \end{decisionbox}
 
-\begin{decisionbox}{Design Decision: Tiered Truncation Budgets (\texttt{HOT} vs. \texttt{COLD})}
+\begin{decisionbox}{Tiered Truncation Budgets (\texttt{HOT} vs. \texttt{COLD})}
     \textbf{Problem:} Feeding complete command outputs (e.g. file listings or compiler logs) back into the prompt quickly overflows the context window.
     
     \textbf{Solution:} We implement a tiered head/tail truncation strategy. The active turn's output is allocated a \textbf{Hot Budget} (up to 3,000 characters head, 1,000 characters tail) to support follow-up decisions. Older replayed history turns are truncated to a \textbf{Cold Budget} (1,000 characters head, 300 characters tail), which provides enough context to resolve follow-ups (like referring to listed files) while saving tokens.
@@ -472,20 +551,20 @@ Below is a live multi-turn session log using \texttt{gpt-4o-mini}, demonstrating
 $ DOIT_SESSION=demo doit "list the files here"
 $ ls -l
 total 232
--rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 README.md
--rw-r--r--@  1 yuval  staff  30675 Jul  7 18:57 DECISIONS.md
+-rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 notes.txt
+-rw-r--r--@  1 yuval  staff  30675 Jul  7 18:57 report.txt
 
 $ DOIT_SESSION=demo doit "now sort them by date"
 $ ls -lt
 total 232
--rw-r--r--@  1 yuval  staff  30675 Jul  7 18:57 DECISIONS.md
--rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 README.md
+-rw-r--r--@  1 yuval  staff  30675 Jul  7 18:57 report.txt
+-rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 notes.txt
 
 $ DOIT_SESSION=demo doit "now in ascending order"
 $ ls -ltr
 total 232
--rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 README.md
--rw-r--r--@  1 yuval  staff  30675 Jul  7 18:57 DECISIONS.md
+-rw-r--r--@  1 yuval  staff  12405 Jul  7 18:24 notes.txt
+-rw-r--r--@  1 yuval  staff  30675 Jul  7 18:57 report.txt
 \end{lstlisting}
 
 \subsection{Limitations}
@@ -513,7 +592,7 @@ We introduce the \texttt{ask\_user} tool. When invoked by the LPU, the Controlle
 
 \subsection{Design Decisions}
 
-\begin{decisionbox}{Design Decision: Unanswered Clarification Default Behavior}
+\begin{decisionbox}{Unanswered Clarification Default Behavior}
     \textbf{Problem:} How to proceed if the user presses Enter (empty input) or interrupts the prompt.
     
     \textbf{Solution:} Pressing Enter returns \texttt{"no answer"} to the LPU, instructing it to proceed with the default option it stated. If this default results in a destructive command, the Layer 2 safety confirmation gate (\texttt{Proceed? [y/N]}) still blocks execution. Pressing Ctrl-C raises a KeyboardInterrupt, aborts the turn immediately, and logs the abort status.
@@ -579,7 +658,7 @@ $ doit "modify it to also show file sizes"
 You can use: find . -name "*.py" -mtime -7 -ls
 $ doit "execute it"
 $ find . -name "*.py" -mtime -7 -ls
-  14283    8 -rw-r--r--   1 yuval  staff  1319 Jul  7 15:00 ./doit
+  14283    8 -rw-r--r--   1 yuval  staff  1319 Jul  7 15:00 ./train.py
 \end{lstlisting}
 
 \subsection{Limitations}
@@ -599,7 +678,7 @@ The LPU manipulates these facts via two specialized tools: \texttt{remember(fact
 
 \subsection{Design Decisions}
 
-\begin{decisionbox}{Design Decision: Global Shared Storage vs. Session-Keyed Memory}
+\begin{decisionbox}{Global Shared Storage vs. Session-Keyed Memory}
     \textbf{Problem:} Determining the persistence scope for stored facts.
     
     \textbf{Alternative Rejected:} Storing memories inside the terminal's isolated session history.
@@ -607,7 +686,7 @@ The LPU manipulates these facts via two specialized tools: \texttt{remember(fact
     \textbf{Rationale:} Storing facts per session defeats the purpose of memory. If a user defines their project directory in one terminal, they expect that preference to be recognized when starting a fresh terminal or working in a different directory. Storing memories globally ensures they are visible across all terminal sessions.
 \end{decisionbox}
 
-\begin{decisionbox}{Design Decision: Memory Operations as Within-Turn Steps}
+\begin{decisionbox}{Memory Operations as Within-Turn Steps}
     \textbf{Problem:} Ensuring that metadata operations (like saving a fact) do not block or consume the execution budget.
     
     \textbf{Rationale:} If a user issues a command like \texttt{"remember this is my code folder and list files in it"}, the model must call \texttt{remember} followed by \texttt{run\_command}. If memory tool calls counted towards the command step budget (which defaults to 1), the agent would stop after memorizing, failing to execute the command. Processing memory tools as within-turn steps resolves this constraint.
@@ -627,7 +706,7 @@ $ change_dir ~/school/llms/ass3
 \end{lstlisting}
 
 \subsection{Limitations}
-\begin{decisionbox}{Design Decision/Limitation: Monotonic ID Generation and Reuse}
+\begin{decisionbox}{Limitation: Monotonic ID Generation and Reuse}
     \textbf{Behavior:} Memory IDs are generated dynamically as \texttt{m\{max\_id + 1\}}. If the highest ID is forgotten, its identifier is recycled for the next memory addition.
     
     \textbf{Limitation:} While this keeps identifiers short and readable, it creates a potential reference conflict in long-term history records. If an old replayed turn references a recycled ID, the context might contain a different fact than what the model originally saw. We accepted this limitation due to the small scale of memories (typically under a dozen facts).
@@ -675,13 +754,13 @@ When \texttt{doit} runs, the controller calls \texttt{load\_recent\_user\_comman
 
 \subsection{Design Decisions}
 
-\begin{decisionbox}{Design Decision: Python-Side Log Filtering vs. Shell Hook Filtering}
+\begin{decisionbox}{Python-Side Log Filtering vs. Shell Hook Filtering}
     \textbf{Alternative Rejected:} Filtering out \texttt{doit} invocations inside the shell configuration hook itself.
     
     \textbf{Rationale:} Shell-side configurations are fragile and can easily crash prompt drawing or command resolution if they hit syntax errors. We chose to log all commands indiscriminately from the shell, delegating the filtering and parsing logic to Python where it can be managed safely.
 \end{decisionbox}
 
-\begin{decisionbox}{Design Decision: Isolated Per-Terminal History Streams}
+\begin{decisionbox}{Isolated Per-Terminal History Streams}
     \textbf{Rationale:} Logging command history under a session-keyed folder \texttt{shell\_hist/\$DOIT\_SESSION} guarantees that manual actions typed in Terminal A do not pollute Terminal B's context, maintaining local alignment.
 \end{decisionbox}
 
@@ -698,7 +777,7 @@ The command 'cat status.log' failed because there is no file named 'status.log' 
 \end{lstlisting}
 
 \subsection{Limitations}
-\begin{decisionbox}{Design Decision/Limitation: Manual Dotfile Synchronization}
+\begin{decisionbox}{Limitation: Manual Dotfile Synchronization}
     \textbf{Problem:} Updates to the snippet template in \texttt{shell/zshrc\_snippet.sh} do not automatically synchronize with the user's active configuration file.
     
     \textbf{Limitation:} If the shell hooks change in the codebase, the user must manually re-copy and re-source the snippet. Automating this sync was rejected to avoid corrupting dotfiles.
@@ -732,7 +811,7 @@ When building the context for subsequent turns, the controller replays the past 
 
 \subsection{Design Decisions}
 
-\begin{decisionbox}{Design Decision: Unified User/Assistant Chat Message Splicing vs. Native Tool Roles}
+\begin{decisionbox}{Unified User/Assistant Chat Message Splicing vs. Native Tool Roles}
     \textbf{Problem:} Replaying tool execution results across different invocations.
     
     \textbf{Alternative Rejected:} Replaying history using the native tool roles.
@@ -747,10 +826,10 @@ Below is a live session where the user asks a question about the output of a pri
 $ doit "list the largest files in this directory"
 $ ls -lhS
 total 232K
--rw-r--r--@ 1 yuval  staff   30K Jul  7 18:57 DECISIONS.md
--rw-r--r--@ 1 yuval  staff   12K Jul  7 18:24 README.md
+-rw-r--r--@ 1 yuval  staff   30K Jul  7 18:57 report.txt
+-rw-r--r--@ 1 yuval  staff   12K Jul  7 18:24 notes.txt
 $ doit "which of these is larger?"
-DECISIONS.md is the larger file, with a size of 30K compared to README.md's 12K.
+report.txt is the larger file, with a size of 30K compared to notes.txt's 12K.
 \end{lstlisting}
 
 \subsection{Limitations}
@@ -768,13 +847,13 @@ For every turn, the controller compiles a one-line summary block for each siblin
 
 \subsection{Design Decisions}
 
-\begin{decisionbox}{Design Decision: Lightweight Summaries + Fetch Tool vs. Full Context Injection}
+\begin{decisionbox}{Lightweight Summaries + Fetch Tool vs. Full Context Injection}
     \textbf{Alternative Rejected:} Splicing the full multi-turn history of all active terminals.
     
     \textbf{Rationale:} Injecting full transcripts of all active windows would lead to severe context pollution, high latency, and increased costs. Splicing a one-line summary of other terminals keeps the model aware of active session IDs and topics, and the \texttt{read\_session} tool allows it to fetch details only when explicitly requested.
 \end{decisionbox}
 
-\begin{decisionbox}{Design Decision: Context Block Ordering for Local Pronoun Resolution}
+\begin{decisionbox}{Context Block Ordering for Local Pronoun Resolution}
     \textbf{Problem:} Ensuring that implicit references (e.g. ``sort them'') resolve to the local terminal window rather than another window's files.
     
     \textbf{Solution:} In \texttt{build\_messages} we put the \texttt{other\_sessions\_block} in the ambient setup --- after the memory block, but before this session's own replayed history. The local history sits right above the current request, so because it is the closest context, implicit references resolve locally by default. The full order is: system, environment, memory, other-sessions, local history, shell history, request.
@@ -852,13 +931,13 @@ If any command returns a non-zero exit code, the controller triggers a self-corr
 
 \subsection{Design Decisions}
 
-\begin{decisionbox}{Design Decision: Opt-In Plans vs. Global Step Budget Increase}
+\begin{decisionbox}{Opt-In Plans vs. Global Step Budget Increase}
     \textbf{Problem:} Increasing step limits globally degrades performance and increases costs on simple queries.
     
     \textbf{Rationale:} A simple query like \texttt{"what is my disk space?"} should never consume more than 1 LPU call. By utilizing an opt-in \texttt{plan} tool, the model explicitly signals when a task is complex, raising the step cap only for the turn that requested it.
 \end{decisionbox}
 
-\begin{decisionbox}{Design Decision: Capability-Gating vs. Adapter-Hardwiring}
+\begin{decisionbox}{Capability-Gating vs. Adapter-Hardwiring}
     \textbf{Rationale:} We gate the plan tool via the configuration parameter \texttt{enable\_plans} rather than hardcoding it to the adapter. This keeps native and prompted adapters fully interchangeable while isolating plan execution to models with high instruction-following competence.
 \end{decisionbox}
 

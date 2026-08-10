@@ -9,7 +9,7 @@ DoitAgentSafety[@T]: {
   S: {
     AGENT_INSTRUCTIONS
     SAFETY_INSTRUCTIONS                    // destructive -> y/N gate; sudo/interactive blocked
-    AVAILABLE_TOOLS(run_command, answer)   // via API tools=
+    AVAILABLE_TOOLS(run_command, answer)   // via API tools=; run_command(command, is_destructive, explanation) — is_destructive + explanation ARE safety layer 1
   }
   U: {
     ENV_INFO(env.cwd[@T], env.datetime[@T], env.shell[@T], env.os[@T])
