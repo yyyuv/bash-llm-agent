@@ -579,8 +579,6 @@ When \texttt{doit} runs, it loads the session ID from the environment variable \
 \subsection{Design Decisions}
 
 \begin{decisionbox}{JSONL Storage Format}
-    \textbf{Problem:} Selecting an appropriate storage format for history.
-    
     \textbf{Choice:} We chose JSONL (JSON Lines) files over SQLite. JSONL is lightweight, human-readable, and allows O(1) appends. It facilitates debugging and log evidence curation for the report.
 \end{decisionbox}
 
@@ -624,7 +622,7 @@ The final turn shows the agent being honest about a platform limitation rather t
 History is a fixed window of the last $K=10$ turns; anything older is dropped entirely rather than summarized, so a reference to a command from twelve turns ago cannot be resolved. Compaction (folding evicted turns into a running digest) is the natural remedy but is described, not implemented. Separately, when the shell snippet is not installed \texttt{DOIT\_SESSION} falls back to \texttt{"default"}, and all terminals then share a single history stream.
 
 \subsection{ACDL Context Specification: DoitAgentHistory}
-The formal context structure representing the conversation history replay integration is detailed in the visual ACDL diagram below:
+The ACDL diagram below adds the replayed conversation history to the context:
 
 \begin{figure}[H]
     \centering
@@ -750,13 +748,11 @@ Memory storage is managed in \texttt{doitlib/state.py} via the flat JSON file \t
 
 During context assembly, the controller invokes \texttt{memory\_block()} in \texttt{doitlib/context.py}, which formats the current memories using the template in \texttt{prompts/memory\_block.txt}. This block lists each stored fact with a short stable id (e.g., \texttt{m1}, \texttt{m2}) and injects them as \texttt{sys.memories}. This goes in its own \texttt{user} message, not the system prompt: only \texttt{agent\_instructions()} uses the \texttt{system} role, and every other block (memory included) is a \texttt{user} message.
 
-The LPU manipulates these facts via two specialized tools: \texttt{remember(fact)} and \texttt{forget(id)}. Within the controller's turn loop, memory modifications are treated as within-turn steps. When the agent issues a memory tool call, the controller executes the state change in \texttt{\_handle\_memory} and immediately re-enters the execution loop (calling the LPU again) without decrementing the command step limit. This design allows the model to process memory changes and subsequently execute commands in a single user turn.
+The LPU manipulates these facts via two specialized tools: \texttt{remember(fact)} and \texttt{forget(id)}. Within the controller's turn loop, memory modifications are treated as within-turn steps: when the agent issues a memory tool call, the controller executes the state change in \texttt{\_handle\_memory} and immediately re-enters the execution loop without decrementing the command step limit (the rationale is in the design decision below).
 
 \subsection{Design Decisions}
 
 \begin{decisionbox}{Global Shared Storage vs. Session-Keyed Memory}
-    \textbf{Problem:} Determining the persistence scope for stored facts.
-    
     \textbf{Alternative Rejected:} Storing memories inside the terminal's isolated session history.
     
     \textbf{Rationale:} Storing facts per session defeats the purpose of memory. If a user defines their project directory in one terminal, they expect that preference to be recognized when starting a fresh terminal or working in a different directory. Storing memories globally ensures they are visible across all terminal sessions.
@@ -814,7 +810,7 @@ $ doit "my favourite folder was changed to /prompts"
 \end{decisionbox}
 
 \subsection{ACDL Context Specification: DoitAgentMemory}
-The context structure representing the persistent memory block injection is detailed in the visual ACDL diagram below:
+The ACDL diagram below adds the persistent-memory block to the context:
 
 \begin{figure}[H]
     \centering
@@ -898,7 +894,7 @@ doit "..." calls are excluded -- they are the agent's own actions, not yours.)
 \end{decisionbox}
 
 \subsection{ACDL Context Specification: DoitAgentUserAware}
-The context structure representing manual user shell history injection is detailed in the visual ACDL diagram below:
+The ACDL diagram below adds the manual user shell-history block to the context:
 
 \begin{figure}[H]
     \centering
@@ -1035,7 +1031,7 @@ $ mkdir {2020..2026}
 Cross-session awareness is bounded by a 24-hour recency filter, so a task run in another window yesterday is invisible. The always-injected summaries are deliberately thin (the last couple of requests plus cwd and age) --- enough to \emph{notice} a sibling session, but too sparse to reproduce its work faithfully on their own. Correct cross-session copying therefore depends on the model choosing to call \texttt{read\_session} for the full detail; if it copies from the one-line summary alone, it may reconstruct the task incorrectly.
 
 \subsection{ACDL Context Specification: DoitAgentMultitask}
-The context structure representing cross-session summaries and the dynamic retrieval tool is detailed in the visual ACDL diagram below:
+The ACDL diagram below adds the cross-session summaries and the \texttt{read\_session} retrieval tool to the context:
 
 \begin{figure}[H]
     \centering
