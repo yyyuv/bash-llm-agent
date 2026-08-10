@@ -328,6 +328,9 @@ The decision the model returns is a \emph{structured tool call}, not free text. 
 }
 \end{lstlisting}
 
+\subsection{Limitations}
+Single-command mode is deliberately minimal, and that shows in three ways. First, the turn runs exactly one command (\texttt{max\_steps=1}), so a request that genuinely needs several steps cannot be handled at this stage --- this is what the Phase~9 \texttt{plan} tool (Section~\ref{sec:further_extensions}) later lifts. Second, the command is executed straight from a single model call, and its output is never fed back, so the model cannot see the result and self-correct here (added later in Section~\ref{sec:output_awareness}); nothing checks that the command does what the user \emph{meant}, only that it is not destructive. Third, correctness depends on the model emitting syntax that fits the host shell and OS --- weaker models sometimes emit GNU-only flags that fail on BSD/macOS (Section~\ref{sec:model_flexibility}).
+
 \subsection{ACDL Context Specification: DoitAgentSingleCommand}
 The diagram below shows the context we build for a single-command turn: the system prompt, the environment block, and the user request. In single-command mode (\texttt{max\_steps=1}) the model makes one decision and the turn ends. The command's output is printed and logged, but it is never fed back to the model, so the diagram stops at the request.
 
@@ -441,6 +444,8 @@ We evaluated three models using the test suite in \texttt{tests/cases.md}:
     \label{tab:models_eval}
 \end{table}
 
+We used the ${\sim}4$B tier (\texttt{qwen3:4b-instruct}, \texttt{gemma3:4b}) that the assignment permits, rather than the 7--8B models our original plan named: we served the local models on our own machines, and downloading and running the larger models there was prohibitively slow.
+
 \subsection{Analysis of Divergences and Failure Modes}
 
 \subsubsection{Gemma-3 Impossible Request Failure}
@@ -506,6 +511,34 @@ The ranking is \texttt{gpt-4o-mini} (10/13) $>$ \texttt{qwen3:4b} (7/13) $>$ \te
     \item The prompted-adapter JSON parser passed \textbf{10/10} offline cases (\texttt{logs/phase3/prompted\_adapter\_results.json}), covering fenced JSON, JSON-in-prose, braces-inside-strings, hallucinated-tool rejection, and the retry path.
     \item Live, \texttt{qwen3} (native) produced \textbf{no} JSON/tool-call failures across all 13 cases; \texttt{gemma3} (prompted) hit one malformed reply it recovered from and one hard failure after two retries.
 \end{itemize}
+
+\subsection{Local-vs-Local Head-to-Head: qwen3 vs gemma3}
+The assignment asks specifically for a comparison between a local model adapted for tool-calling (\texttt{qwen3:4b-instruct}, native) and one that is not (\texttt{gemma3:4b}, prompted JSON). They split the wins --- neither is uniformly better --- and the differences land exactly where structured output and tool-use decisions matter.
+
+\textbf{qwen wins (case 57, ``3 most common words'').} qwen composes a correct pipeline and gets the right counts; gemma mis-flags the read-only pipeline as destructive and aborts, answering nothing:
+\begin{lstlisting}[language=bash, caption={qwen produces the answer; gemma over-flags a read-only command and stops.}]
+# qwen3 (native) -- correct
+$ grep -oE '([a-z]+)' notes.txt | sort | uniq -c | sort -nr | head -n 3
+   4 the
+   3 apple
+   2 fox
+# gemma3 (prompted) -- over-flags a read-only pipeline, aborts, answers nothing
+This command modifies the filesystem:
+    cat notes.txt > temp.txt && tr ... | sort | uniq -c | sort -nr | head -3
+Proceed? [y/N] Aborted. (Nothing was executed.)
+\end{lstlisting}
+
+\textbf{gemma wins (case 5, ``how do I \dots'').} The tool-calling model is not always the smarter one: gemma correctly explains and runs nothing, while qwen wrongly executes instead of answering:
+\begin{lstlisting}[language=bash, caption={gemma answers the question; qwen runs a command it should not.}]
+# gemma3 -- correct: explains, runs nothing
+$ doit "how do I see hidden files?"
+To view hidden files, use the `ls -a` command ...
+# qwen3 -- wrong: executes instead of answering
+$ doit "how do I see hidden files?"
+$ ls -a
+\end{lstlisting}
+
+\textbf{Stability and structured output.} On the prompted adapter gemma is unstable run-to-run: the same joke request refused once and was told the next run, and case 60 produced a malformed reply on one run and a hard ``no JSON after 2 attempts'' failure on the next. qwen on the native adapter produced \textbf{zero} JSON/tool-call failures across all 13 cases --- the native tool-calling protocol simply removes the JSON-parsing failure mode. qwen's one quirk was the opposite of gemma's recklessness: over-caution, refusing in case~1 to list a harmless \texttt{/tmp} sandbox at all.
 
 \subsection{Limitations}
 Model flexibility is bounded by the weakest supported model. The 4B local models we tested (\texttt{qwen3:4b-instruct}, \texttt{gemma3:4b}) are materially less reliable than the API model (7/13 and 6/13 versus 10/13 in Table~\ref{tab:model_results}), and the prompted adapter grants only \textbf{one} JSON-repair retry before giving up --- a persistently malformed reply aborts the turn. We also observed model-specific quirks the framework cannot fix from outside: \texttt{gemma3} mis-flagging read-only pipelines as destructive, and both local models emitting GNU-only flags that fail on BSD/macOS. The adapter guarantees a \emph{uniform interface}, not uniform competence.
@@ -684,6 +717,9 @@ $ find . -name "*.py" -mtime -7 -exec ls -lh {} \;           <- turn 3: RAN, sho
 \subsection{Limitations}
 We observed that smaller local models (such as \texttt{gemma3:4b}) frequently fail on the third turn (``execute it''), responding with ``Execute what?'' or hallucinating unrelated commands. This indicates that tracking command references across multiple conversational turns is a capability limited to larger, instruction-tuned models.
 
+\subsection{ACDL Context}
+Richer interactions add no new context block: answering ``how do I \dots'' is a plain \texttt{answer}, and resolving a later ``execute it'' relies entirely on the multi-turn history replay. The relevant ACDL is therefore the history specification already shown in Figure~\ref{fig:acdl_v4} (Section~\ref{sec:multi_turn}).
+
 % SECTION 8: MEMORY
 \section{Memory}
 \label{sec:memory}
@@ -723,6 +759,31 @@ Fact stored.
 Terminal B:
 $ doit "go to my LLM class project folder"
 $ change_dir ~/school/llms/ass3
+\end{lstlisting}
+
+\subsection{What Worked and What Didn't: a Memory Edit that Crashed}
+Editing a memory (``I changed my mind --- ask me each time instead'', meant to drop one preference) crashed, and each retry deleted another memory:
+
+\begin{lstlisting}[language=bash, caption={The bug: a memory edit crashes and quietly deletes memories (logs/phase6/behavior\_issue.txt).}]
+memories before:  [m1 = "project folder", m2 = "prefers ls sorted by size"]
+$ doit "I changed my mind -- ask me each time instead"
+· forgot m2
+doit: error: OpenAIException 400 -- 'tool_calls' must each be followed by a tool
+response (one was left unanswered)
+$ doit "I changed my mind -- ask me each time instead"   <- retry
+· forgot m1                                              <- forgets the WRONG memory
+memories after:  []   (both facts gone)
+\end{lstlisting}
+
+\textbf{Why.} \texttt{gpt-4o-mini} put \texttt{forget} and \texttt{remember} in one message as two tool-calls. Our controller handles one decision per call, so it acted on the first and replayed the message with the second call still unanswered --- which OpenAI rejects with a 400. Because \texttt{forget} had already run before the crash, every retry deleted one more memory.
+
+\textbf{The fix.} Before replaying a message we now drop the extra tool-calls (\texttt{llm.\_dump\_single\_tool\_call}); the dropped action simply runs on the next loop step, after the model sees the updated state. The edit is then crash-free:
+
+\begin{lstlisting}[language=bash, caption={After the fix: the edit updates one memory and keeps the other (logs/phase6/good\_interaction\_memo.txt).}]
+$ doit "my favourite folder was changed to /prompts"
+· forgot m2
+· remembered [m2]: the user's favourite folder is /prompts
+(m1 kept, m2 updated -- no crash, no wrong deletion)
 \end{lstlisting}
 
 \subsection{Limitations}
@@ -878,6 +939,9 @@ Truncation is head-and-tail, so the \emph{middle} of a long output is discarded:
 
 Two behavioral weaknesses also surfaced in the ``which are safe to delete?'' runs above. First, in single-command mode whether the agent inspects all files in one command or one file per turn is non-deterministic; in one run it checked files one at a time, lost track of its own progress (``No, I have not checked all files yet''), and only batched after an explicit ``do them all at once''. Second, gathering the right facts does not guarantee the right conclusion: the delete verdict varied between runs and reasoned only from file type and byte size, ignoring obvious name cues --- \texttt{backup.tmp} and \texttt{cache.bin} are the disposable files, yet the agent repeatedly proposed \emph{keeping} them.
 
+\subsection{ACDL Context}
+Output awareness adds no new context block: a follow-up question about a prior command's output is answered from the same replayed history, so the relevant ACDL is the history specification in Figure~\ref{fig:acdl_v4} (Section~\ref{sec:multi_turn}). The hot/cold truncation budgets drawn there (\texttt{truncate\_for\_context}) are exactly what decides how much of a prior command's output this section can still see.
+
 % SECTION 11: MULTI-TASKING
 \section{Multi-tasking}
 \label{sec:multi_tasking}
@@ -1012,6 +1076,29 @@ usage: stat [-FLnq] [-f format | -l | -r | -s | -x] [-t timefmt] [file ...]
 doit: command exited with code 1
 $ stat -f '%m' <sandbox>/logs/app.log.gz     <- retried with the BSD flag
 1783581246
+\end{lstlisting}
+
+\subsection{What Worked and What Didn't: a Plan that Stopped Halfway}
+A re-run of the multi-step pattern hit a real bug: the turn gzipped only 2 of 3 files, with no error and no final answer. Request: ``find the 3 largest .log files here and gzip them''.
+
+\begin{lstlisting}[language=bash, caption={The bug: the plan runs out of budget and stops after 2 of 3 files (logs/phase9/live\_budget\_exhaustion\_found\_pre\_fix.txt).}]
+$ find . -name '*.log' -exec du -b {} + | sort -nr | head -n 3
+du: invalid option -- b        <- du failed (GNU flag), but the pipeline's exit code is
+                                  head's (0), so the failure was invisible to retry
+$ find . -name '*.log' -exec du -k {} + | sort -nr | head -n 3   <- model self-corrected
+$ gzip ./d.log                 <- one file per command...
+$ gzip ./b.log                 <- ...then budget ran out; a.log never gzipped
+\end{lstlisting}
+
+\textbf{Why.} Two things combined. A pipeline reports only its \emph{last} command's exit code, so \texttt{du}'s real failure was hidden and the retry never fired --- but the model still ``spent'' a step fixing it. And it ran ``gzip each'' as one command per file instead of one batched command, so the plan's step budget (\texttt{len(steps) + PLAN\_SLACK}) ran out before the third file.
+
+\textbf{The fix.} We raised \texttt{PLAN\_SLACK} from 2 to 3 and told the model to batch same-type actions into one command. Re-verified live:
+
+\begin{lstlisting}[language=bash, caption={After the fix: one batched gzip, all three files done (logs/phase9/live\_plan\_batched\_gpt4omini.txt).}]
+$ find . -name '*.log' -exec du -h {} + | sort -hr | head -n 3
+880K ./d.log   492K ./b.log   100K ./a.log
+$ gzip ./d.log ./b.log ./a.log     <- now one command
+The 3 largest .log files have been successfully gzipped.
 \end{lstlisting}
 
 \subsection{Limitations}
